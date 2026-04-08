@@ -1817,17 +1817,19 @@ async function handleBarcode(upc) {
       searchSpotify(rel.artist, rel.title),
       fetchCoverArt(rel.mbid)
     ]);
-    if (spotifyData) {
-      spotifyData.barcode = upc;
-      spotifyData.mbid = rel.mbid;
-      spotifyData.mbTrackCount = rel.trackCount;
-      spotifyData.mbTitle = rel.title;
-      // Use Cover Art Archive artwork (correct for this exact release)
-      if (coverArt) { spotifyData.image = coverArt.image; spotifyData.imageLarge = coverArt.imageLarge; }
-      hideProcessing();
-      showResult(spotifyData, 'barcode');
-      return;
-    }
+    // Build result: Spotify match if available, otherwise MB data
+    const result = spotifyData || {
+      name: rel.title, artist: rel.artist, year: rel.year || '',
+      uri: null, image: null, imageLarge: null, demo: true
+    };
+    result.barcode = upc;
+    result.mbid = rel.mbid;
+    result.mbTrackCount = rel.trackCount;
+    result.mbTitle = rel.title;
+    if (coverArt) { result.image = coverArt.image; result.imageLarge = coverArt.imageLarge; }
+    hideProcessing();
+    showResult(result, 'barcode');
+    return;
   }
 
   // Discogs fallback
@@ -1992,9 +1994,10 @@ async function searchSpotifyTracks(tracks) {
   for (const t of tracks) {
     try {
       const q = encodeURIComponent(`track:${t.title} artist:${t.artist}`);
-      const r = await fetch(`https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`, {
+      const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`, {
         headers, signal: AbortSignal.timeout(5000)
       });
+      if (!r) { results.push({ ...t, spotifyUri: null, found: false }); continue; }
       const d = await r.json();
       const track = d.tracks?.items?.[0];
       results.push({ ...t, spotifyUri: track?.uri || null, spotifyName: track?.name || null, found: !!track });
@@ -2225,12 +2228,12 @@ async function lookupDiscogs(upc) {
 async function searchSpotifyByUPC(upc) {
   if (!await ensureSpotifyToken()) return null;
   try {
-    const r = await fetch(`https://api.spotify.com/v1/search?q=upc:${upc}&type=album&limit=1`, {
+    const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=upc:${upc}&type=album&limit=1`, {
       headers: { 'Authorization': `Bearer ${config.spotifyToken}` },
       signal: AbortSignal.timeout(8000)
     });
+    if (!r) return null;
     const d = await r.json();
-    console.log('Spotify UPC search:', d.albums?.items?.length, 'results');
     const album = d.albums?.items?.[0];
     if (album) return formatSpotifyAlbum(album);
   } catch(e) { console.warn('Spotify UPC error:', e); }
@@ -2278,42 +2281,49 @@ async function searchITunesArtwork(artist, title) {
   return null;
 }
 
+// Spotify rate limit protection
+let _spotifyBackoff = 0; // timestamp until which we should not call Spotify
+
+async function spotifyFetch(url, opts) {
+  if (_spotifyBackoff > Date.now()) {
+    const secs = Math.ceil((_spotifyBackoff - Date.now()) / 1000);
+    console.warn(`Spotify throttled, ${secs}s remaining`);
+    return null;
+  }
+  const r = await fetch(url, opts);
+  if (r.status === 429) {
+    const retryAfter = parseInt(r.headers.get('retry-after') || '60');
+    _spotifyBackoff = Date.now() + (retryAfter * 1000);
+    const mins = Math.ceil(retryAfter / 60);
+    showToast(`Spotify rate limit — pausing for ${mins} min`);
+    console.warn('Spotify 429, backing off for', retryAfter, 'seconds');
+    return null;
+  }
+  return r;
+}
+
 async function searchSpotify(artist, title) {
   if (!await ensureSpotifyToken()) {
-    // No Spotify — try iTunes for cover art
     const artwork = await searchITunesArtwork(artist, title);
     return { name: title, artist: artist, year: '', uri: null, image: artwork?.image || null, imageLarge: artwork?.imageLarge || null, demo: true };
   }
 
-
   const headers = { 'Authorization': `Bearer ${config.spotifyToken}` };
 
-  // Try 1: strict album + artist search
-  try {
-    const q1 = encodeURIComponent(`album:${title} artist:${artist}`);
-    const r1 = await fetch(`https://api.spotify.com/v1/search?q=${q1}&type=album&limit=3`, { headers });
-    const d1 = await r1.json();
-    console.log('Spotify strict search:', d1.albums?.items?.length, 'results');
-    if (d1.albums?.items?.[0]) return formatSpotifyAlbum(d1.albums.items[0]);
-  } catch(e) { console.error('Spotify strict search error:', e); }
+  // Single combined search first (saves API calls)
+  const queries = [
+    `album:${title} artist:${artist}`,
+    `${artist} ${title}`,
+  ];
 
-  // Try 2: looser search
-  try {
-    const q2 = encodeURIComponent(`${artist} ${title}`);
-    const r2 = await fetch(`https://api.spotify.com/v1/search?q=${q2}&type=album&limit=3`, { headers });
-    const d2 = await r2.json();
-    console.log('Spotify loose search:', d2.albums?.items?.length, 'results');
-    if (d2.albums?.items?.[0]) return formatSpotifyAlbum(d2.albums.items[0]);
-  } catch(e) { console.error('Spotify loose search error:', e); }
-
-  // Try 3: just the artist name
-  try {
-    const q3 = encodeURIComponent(artist);
-    const r3 = await fetch(`https://api.spotify.com/v1/search?q=${q3}&type=album&limit=1`, { headers });
-    const d3 = await r3.json();
-    console.log('Spotify artist-only search:', d3.albums?.items?.length, 'results');
-    if (d3.albums?.items?.[0]) return formatSpotifyAlbum(d3.albums.items[0]);
-  } catch(e) {}
+  for (const q of queries) {
+    try {
+      const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=album&limit=3`, { headers });
+      if (!r) return null; // rate limited
+      const d = await r.json();
+      if (d.albums?.items?.[0]) return formatSpotifyAlbum(d.albums.items[0]);
+    } catch(e) { console.error('Spotify search error:', e); }
+  }
 
   return null;
 }
