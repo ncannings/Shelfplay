@@ -2281,15 +2281,24 @@ async function searchITunesArtwork(artist, title) {
   return null;
 }
 
-// Spotify rate limit protection
-let _spotifyBackoff = 0; // timestamp until which we should not call Spotify
+// Spotify rate limit protection — self-throttle + respect 429
+let _spotifyBackoff = 0;
+let _spotifyLastCall = 0;
+const SPOTIFY_MIN_INTERVAL = 200; // ms between calls (max ~5/sec)
 
 async function spotifyFetch(url, opts) {
+  // Respect server-imposed backoff
   if (_spotifyBackoff > Date.now()) {
     const secs = Math.ceil((_spotifyBackoff - Date.now()) / 1000);
     console.warn(`Spotify throttled, ${secs}s remaining`);
     return null;
   }
+  // Self-throttle: ensure minimum interval between calls
+  const now = Date.now();
+  const wait = SPOTIFY_MIN_INTERVAL - (now - _spotifyLastCall);
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  _spotifyLastCall = Date.now();
+
   const r = await fetch(url, opts);
   if (r.status === 429) {
     const retryAfter = parseInt(r.headers.get('retry-after') || '60');
@@ -2310,7 +2319,6 @@ async function searchSpotify(artist, title) {
 
   const headers = { 'Authorization': `Bearer ${config.spotifyToken}` };
 
-  // Single combined search first (saves API calls)
   const queries = [
     `album:${title} artist:${artist}`,
     `${artist} ${title}`,
@@ -2319,7 +2327,7 @@ async function searchSpotify(artist, title) {
   for (const q of queries) {
     try {
       const r = await spotifyFetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=album&limit=3`, { headers });
-      if (!r) return null; // rate limited
+      if (!r) return null; // rate limited — caller handles fallback
       const d = await r.json();
       if (d.albums?.items?.[0]) return formatSpotifyAlbum(d.albums.items[0]);
     } catch(e) { console.error('Spotify search error:', e); }
@@ -2646,7 +2654,17 @@ async function playOnDevice() {
 
   try {
     if (!currentResult.trackUris && !currentResult.uri) {
-      showToast('No playable content — try Build Playlist');
+      // No Spotify data — open a search in Spotify as fallback
+      const q = encodeURIComponent(((currentResult.artist || '') + ' ' + (currentResult.name || '')).trim());
+      if (q) {
+        const a = document.createElement('a');
+        a.href = 'https://open.spotify.com/search/' + q;
+        a.target = '_blank'; a.rel = 'noopener';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        showToast('Opening search in Spotify...');
+      } else {
+        showToast('No playable content — try Build Playlist');
+      }
       btn.disabled = false; spinner.style.display = 'none';
       icon.style.display = 'inline'; icon.textContent = '\u25B6';
       return;
@@ -2695,7 +2713,18 @@ async function playOnDeviceDetail() {
     } catch(e) { console.warn('Auto-create playlist failed:', e); }
   }
 
-  if (!detailAlbum.uri && !detailAlbum.playlistUri && !detailAlbum.trackUris?.length) return;
+  if (!detailAlbum.uri && !detailAlbum.playlistUri && !detailAlbum.trackUris?.length) {
+    // No Spotify data — open search as fallback
+    const q = encodeURIComponent(((detailAlbum.artist || '') + ' ' + (detailAlbum.name || '')).trim());
+    if (q) {
+      const a = document.createElement('a');
+      a.href = 'https://open.spotify.com/search/' + q;
+      a.target = '_blank'; a.rel = 'noopener';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      showToast('Opening search in Spotify...');
+    }
+    return;
+  }
   if (!await ensureSpotifyToken()) {
     showToast('Connect Spotify in Settings');
     return;
@@ -2909,7 +2938,8 @@ function openAlbumDetail(album) {
   const btn = document.getElementById('detailPlayBtn');
   btn.classList.remove('playing');
   document.getElementById('detailPlayBtnIcon').textContent = '\u25B6';
-  document.getElementById('detailPlayBtnText').textContent = 'Play Album';
+  const hasPlayable = album.trackUris?.length || album.playlistUri || album.uri;
+  document.getElementById('detailPlayBtnText').textContent = hasPlayable ? 'Play Album' : 'Search on Spotify';
 
   // Populate device chips in detail panel
   populateDeviceChips('detailDeviceScroller');
@@ -2925,6 +2955,16 @@ function openAlbumDetail(album) {
     }
   } else if (album.uri) {
     fetchTracks(album.uri);
+  } else if (album.mbid) {
+    // No Spotify data but have MusicBrainz — fetch track listing
+    document.getElementById('trackListContent').innerHTML = '<div class="track-loading">Loading tracks from MusicBrainz...</div>';
+    fetchMusicBrainzTracks(album.mbid).then(tracks => {
+      if (tracks.length) {
+        renderMatchedTracks(tracks.map(t => ({ ...t, found: false })));
+      } else {
+        document.getElementById('trackListContent').innerHTML = '<div class="track-loading">No tracks found</div>';
+      }
+    });
   } else {
     document.getElementById('trackListContent').innerHTML = '<div class="track-loading">No track data available</div>';
   }
