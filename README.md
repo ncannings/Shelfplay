@@ -49,8 +49,7 @@ The Spotify Client ID is loaded from the server at startup (set via `wrangler se
 1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
 2. Create a new app
 3. Set the redirect URI to `https://your-domain.com/callback`
-4. Copy the **Client ID** into `index.html`
-5. Copy the **Client Secret** — you'll need it for the worker secrets
+4. Note the **Client ID** and **Client Secret** — both are set as Worker secrets in Step 4
 
 **Required Spotify scopes** (configured automatically):
 `user-read-playback-state user-modify-playback-state user-library-modify user-library-read playlist-modify-private playlist-modify-public`
@@ -125,6 +124,7 @@ The build script (`node build-worker.js`) combines `index.html` and `worker-rout
 |----------|--------|------|-------------|
 | `/` | GET | - | Serves the SPA |
 | `/callback` | GET | - | Spotify OAuth callback |
+| `/api/config` | GET | - | Public config (Spotify Client ID) |
 | `/api/token` | POST | - | Spotify token exchange |
 | `/api/refresh` | POST | - | Spotify token refresh |
 | `/api/vision` | POST | Admin | Gemini vision (admin only) |
@@ -135,6 +135,7 @@ The build script (`node build-worker.js`) combines `index.html` and `worker-rout
 
 ### Security model
 
+- **Spotify Client ID** — stored as a Worker secret, served to the browser via `/api/config` (public by design in OAuth, but not hardcoded in source).
 - **Spotify Client Secret** — stored as a Cloudflare Worker secret, never exposed to the browser. Token exchange happens server-side.
 - **Gemini API key (server)** — stored as a Worker secret, only accessible with the admin code.
 - **Gemini API key (users)** — BYOK, stored in the browser's localStorage, never sent to the server. API calls go directly from the browser to Google.
