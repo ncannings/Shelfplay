@@ -711,6 +711,32 @@
     font-size: 12px; color: var(--text-3); margin-left: auto;
   }
 
+  .library-toolbar {
+    padding: 0 12px 12px; flex-shrink: 0;
+  }
+  .library-search {
+    width: 100%; background: var(--surface);
+    border: 1px solid var(--surface-2);
+    border-radius: 10px; padding: 10px 14px;
+    color: var(--text); font-family: 'Inter', sans-serif;
+    font-size: 13px; outline: none;
+    -webkit-appearance: none;
+  }
+  .library-search:focus { border-color: var(--amber); }
+  .library-search::placeholder { color: var(--text-3); }
+  .library-sort {
+    display: flex; gap: 6px; margin-top: 8px;
+  }
+  .library-sort button {
+    background: var(--surface); border: 1px solid var(--surface-2);
+    border-radius: 8px; padding: 6px 12px;
+    color: var(--text-3); font-family: 'Inter', sans-serif;
+    font-size: 11px; cursor: pointer; white-space: nowrap;
+  }
+  .library-sort button.active {
+    background: var(--amber); color: var(--bg); border-color: var(--amber);
+  }
+
   .library-list {
     flex: 1; overflow-y: auto;
     padding: 0 12px calc(var(--safe-bottom) + 20px);
@@ -1078,6 +1104,14 @@ if (GA_ID) {
     <button class="back-btn" onclick="closeLibrary()">&#8592;</button>
     <div class="settings-title">Library</div>
     <div class="library-count" id="libraryCount"></div>
+  </div>
+  <div class="library-toolbar" id="libraryToolbar" style="display:none">
+    <input type="text" class="library-search" id="librarySearch" placeholder="Search library..." oninput="onLibrarySearch()">
+    <div class="library-sort">
+      <button class="active" data-sort="recent" onclick="setLibrarySort('recent')">Recent</button>
+      <button data-sort="title" onclick="setLibrarySort('title')">A-Z Title</button>
+      <button data-sort="artist" onclick="setLibrarySort('artist')">A-Z Artist</button>
+    </div>
   </div>
   <div class="library-list" id="libraryList"></div>
 </div>
@@ -2961,6 +2995,10 @@ function addToLibrary(data, source) {
 
 function openLibrary() {
   pauseCamera();
+  _libPage = 0;
+  _libSearch = '';
+  const searchEl = document.getElementById('librarySearch');
+  if (searchEl) searchEl.value = '';
   renderLibrary();
   document.getElementById('libraryPanel').classList.add('open');
 }
@@ -2970,14 +3008,56 @@ function closeLibrary() {
   resumeCamera();
 }
 
+let _libSort = 'recent';
+let _libSortDir = 'asc'; // 'asc' or 'desc'
+let _libSearch = '';
+let _libPage = 0;
+const LIB_PAGE_SIZE = 30;
+let _libFiltered = [];
+
+function onLibrarySearch() {
+  _libSearch = document.getElementById('librarySearch').value.trim().toLowerCase();
+  _libPage = 0;
+  renderLibrary();
+}
+
+function setLibrarySort(sort) {
+  if (_libSort === sort && sort !== 'recent') {
+    _libSortDir = _libSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _libSortDir = 'asc';
+  }
+  _libSort = sort;
+  _libPage = 0;
+  updateSortButtons();
+  renderLibrary();
+}
+
+function updateSortButtons() {
+  document.querySelectorAll('.library-sort button').forEach(b => {
+    const bSort = b.dataset.sort;
+    if (bSort === _libSort) {
+      b.classList.add('active');
+      if (bSort !== 'recent') {
+        b.textContent = (_libSortDir === 'asc' ? 'A-Z ' : 'Z-A ') + (bSort === 'title' ? 'Title' : 'Artist');
+      }
+    } else {
+      b.classList.remove('active');
+      if (bSort === 'title') b.textContent = 'A-Z Title';
+      else if (bSort === 'artist') b.textContent = 'A-Z Artist';
+    }
+  });
+}
+
 function renderLibrary() {
-  const lib = getLibrary();
+  let lib = getLibrary();
   const countEl = document.getElementById('libraryCount');
   const listEl = document.getElementById('libraryList');
-
-  countEl.textContent = lib.length > 0 ? `${lib.length} album${lib.length !== 1 ? 's' : ''}` : '';
+  const toolbar = document.getElementById('libraryToolbar');
 
   if (lib.length === 0) {
+    toolbar.style.display = 'none';
+    countEl.textContent = '';
     listEl.innerHTML = `<div class="library-empty">
       <div class="icon">&#128218;</div>
       <p>Your library is empty.<br>Scan a barcode or album cover to get started.</p>
@@ -2985,11 +3065,40 @@ function renderLibrary() {
     return;
   }
 
+  toolbar.style.display = '';
+
+  // Filter
+  if (_libSearch) {
+    lib = lib.filter(item =>
+      (item.name || '').toLowerCase().includes(_libSearch) ||
+      (item.artist || '').toLowerCase().includes(_libSearch)
+    );
+  }
+
+  // Sort
+  if (_libSort === 'title') {
+    lib = [...lib].sort((a, b) => _libSortDir === 'asc'
+      ? (a.name || '').localeCompare(b.name || '')
+      : (b.name || '').localeCompare(a.name || ''));
+  } else if (_libSort === 'artist') {
+    lib = [...lib].sort((a, b) => _libSortDir === 'asc'
+      ? (a.artist || '').localeCompare(b.artist || '')
+      : (b.artist || '').localeCompare(a.artist || ''));
+  }
+  // 'recent' = default order (already sorted by scannedAt desc)
+
+  _libFiltered = lib;
+  countEl.textContent = `${lib.length} album${lib.length !== 1 ? 's' : ''}`;
+
+  // Paging — render first N items
+  const end = Math.min((_libPage + 1) * LIB_PAGE_SIZE, lib.length);
+  const page = lib.slice(0, end);
+
   let html = '';
-  lib.forEach(item => {
+  page.forEach((item, i) => {
     const date = new Date(item.scannedAt);
     const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    html += `<div class="library-item" onclick="openAlbumDetailFromLibrary(${lib.indexOf(item)})">
+    html += `<div class="library-item" onclick="openAlbumDetailFiltered(${i})">
       <div class="library-item-art">${item.image ? `<img src="${item.image}" alt="">` : ''}</div>
       <div class="library-item-info">
         <div class="library-item-title">${escHtml(item.name)}</div>
@@ -2998,14 +3107,21 @@ function renderLibrary() {
       </div>
     </div>`;
   });
+
+  if (end < lib.length) {
+    html += `<div style="text-align:center;padding:16px">
+      <button onclick="_libPage++;renderLibrary()" style="background:var(--surface-2);border:1px solid var(--surface-3);border-radius:10px;padding:10px 24px;color:var(--text-2);font-family:'Inter',sans-serif;font-size:13px;cursor:pointer">
+        Load more (${lib.length - end} remaining)
+      </button>
+    </div>`;
+  }
+
   listEl.innerHTML = html;
 }
 
-function openAlbumDetailFromLibrary(index) {
-  const lib = getLibrary();
-  const item = lib[index];
+function openAlbumDetailFiltered(index) {
+  const item = _libFiltered[index];
   if (!item) return;
-  // Pass the full library entry — includes matchedTracks, playlistUri, trackUris, etc.
   openAlbumDetail(item);
 }
 
