@@ -7,12 +7,12 @@ Scan vinyl records and CDs by barcode or album cover, then play them on Spotify.
 ### Self-hosted (full Spotify control)
 Scan a barcode, identify the album, and play directly on Alexa — all in seconds.
 
-<video src="https://github.com/ncannings/Shelfplay/raw/main/videos/self_hosted_version.MP4" controls width="300"></video>
+https://github.com/user-attachments/assets/5362ba4c-5968-4f25-b204-d1bce9754368
 
 ### Web version (no setup required)
 Scan and identify albums, then open them in Spotify.
 
-<video src="https://github.com/ncannings/Shelfplay/raw/main/videos/web_version.MP4" controls width="300"></video>
+https://github.com/user-attachments/assets/6351fcff-41f2-473a-b7b1-8e0bcc01fb5c
 
 ## Try It
 
