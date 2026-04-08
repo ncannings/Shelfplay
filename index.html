@@ -388,7 +388,8 @@
     background: var(--surface-2); color: var(--text);
     border: 1px solid var(--surface-3);
     padding: 12px 20px; border-radius: 14px;
-    font-size: 13px; font-weight: 500; white-space: nowrap;
+    font-size: 13px; font-weight: 500;
+    max-width: calc(100vw - 40px); text-align: center; line-height: 1.4;
     transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
     z-index: 200;
     box-shadow: 0 8px 32px rgba(0,0,0,0.4);
@@ -2065,20 +2066,16 @@ async function buildPlaylist() {
       const isAdmin = !!(config.adminCode && config.spotifyToken);
       if (isAdmin && selectedDevice) {
         txt.textContent = 'Playing playlist...';
-        const playR = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${selectedDevice}`, {
-          method: 'PUT',
-          headers: { 'Authorization': `Bearer ${config.spotifyToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ context_uri: currentResult.playlistUri })
-        });
+        const playResult = await spotifyPlay(selectedDevice, { context_uri: currentResult.playlistUri });
         spinner.style.display = 'none';
-        if (playR.status === 204 || playR.ok) {
+        if (playResult.ok) {
           btn.classList.add('playing');
           txt.textContent = 'Now Playing';
           const devName = config.devices.find(d => d.id === selectedDevice)?.name || 'device';
           setStatus('active', `Playing on ${devName}`);
         } else {
           txt.textContent = 'Playlist ready — tap Play';
-          showToast(`Playback failed (${playR.status})`);
+          showToast(playResult.error);
         }
       } else {
         // Non-admin: open playlist in Spotify
@@ -2162,31 +2159,17 @@ async function buildPlaylist() {
     const isAdmin = !!(config.adminCode && config.spotifyToken);
     if (isAdmin && selectedDevice && trackUris.length > 0) {
       txt.textContent = `Playing ${found.length} tracks...`;
-      // Transfer playback to device first (wakes it up)
-      await fetch('https://api.spotify.com/v1/me/player', {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${config.spotifyToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device_ids: [selectedDevice] })
-      }).catch(() => {});
-      const playR = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${selectedDevice}`, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${config.spotifyToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uris: trackUris })
-      });
-      if (playR.status === 204 || playR.ok) {
+      const playResult = await spotifyPlay(selectedDevice, { uris: trackUris });
+      spinner.style.display = 'none';
+      if (playResult.ok) {
         btn.classList.add('playing');
         txt.textContent = `Now Playing (${found.length} tracks)`;
-        spinner.style.display = 'none';
         const devName = config.devices.find(d => d.id === selectedDevice)?.name || 'device';
         setStatus('active', `Playing on ${devName}`);
         if (missing.length) showToast(`${missing.length} tracks not on Spotify`);
       } else {
-        const errBody = await playR.json().catch(() => ({}));
-        console.error('Playback failed:', playR.status, errBody);
-        spinner.style.display = 'none';
-        const reason = errBody?.error?.reason || errBody?.error?.message || `HTTP ${playR.status}`;
         txt.textContent = `${found.length} tracks ready`;
-        showToast(`Playback: ${reason}`);
+        showToast(playResult.error);
       }
     } else if (playlistInfo) {
       spinner.style.display = 'none';
@@ -2525,6 +2508,78 @@ async function captureCover() {
   }
 }
 
+// ─── Spotify Play Helper (wake device + retry) ──────────────────────────────
+async function resolveDeviceId(savedDeviceId) {
+  // Fetch current active devices and match by name (IDs can change)
+  const headers = { 'Authorization': `Bearer ${config.spotifyToken}` };
+  try {
+    const r = await fetch('https://api.spotify.com/v1/me/player/devices', {
+      headers, signal: AbortSignal.timeout(5000)
+    });
+    const d = await r.json();
+    const devices = d.devices || [];
+    console.log('Active Spotify devices:', devices.map(d => `${d.name} (${d.id}) ${d.is_active ? 'ACTIVE' : ''}`));
+
+    // First try exact ID match
+    const exact = devices.find(d => d.id === savedDeviceId);
+    if (exact) return exact.id;
+
+    // Then try name match (device reconnected with new ID)
+    const savedDev = config.devices.find(d => d.id === savedDeviceId);
+    if (savedDev) {
+      const byName = devices.find(d => d.name === savedDev.name);
+      if (byName) {
+        // Update the saved device ID
+        savedDev.id = byName.id;
+        localStorage.setItem('shelfplay_config', JSON.stringify(config));
+        console.log(`Device "${savedDev.name}" ID updated: ${savedDeviceId} → ${byName.id}`);
+        return byName.id;
+      }
+    }
+  } catch(e) { console.warn('Device resolve failed:', e); }
+  return savedDeviceId; // Fall back to saved ID
+}
+
+async function spotifyPlay(deviceId, playBody) {
+  const headers = { 'Authorization': `Bearer ${config.spotifyToken}`, 'Content-Type': 'application/json' };
+
+  // Resolve the actual current device ID (may have changed since last fetch)
+  deviceId = await resolveDeviceId(deviceId);
+
+  // Transfer playback with play:true to force-activate
+  await fetch('https://api.spotify.com/v1/me/player', {
+    method: 'PUT', headers,
+    body: JSON.stringify({ device_ids: [deviceId], play: true })
+  }).catch(() => null);
+
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  // Try play endpoint with retries
+  let r;
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 2000));
+    r = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+      method: 'PUT', headers, body: JSON.stringify(playBody)
+    });
+    lastStatus = r.status;
+    if (r.status === 204 || r.ok) return { ok: true };
+    if (r.status !== 404 && r.status !== 502) break;
+  }
+
+  const errBody = await r.json().catch(() => ({}));
+  const reason = errBody?.error?.reason || errBody?.error?.message || '';
+  const detail = reason ? `${reason} (${lastStatus})` : `HTTP ${lastStatus}`;
+
+  if (lastStatus === 404 || reason === 'NO_ACTIVE_DEVICE') {
+    return { ok: false, error: `Device not responding. Say "Alexa, play Spotify" then try again. (${detail})` };
+  }
+  if (reason === 'PREMIUM_REQUIRED') {
+    return { ok: false, error: 'Spotify Premium required for device playback.' };
+  }
+  return { ok: false, error: detail };
+}
+
 // ─── Playback ─────────────────────────────────────────────────────────────────
 async function playOnDevice() {
   if (!currentResult) return;
@@ -2558,18 +2613,15 @@ async function playOnDevice() {
   spinner.style.display = 'block'; txt.textContent = 'Starting...';
 
   try {
-    // Transfer playback to device first (wakes it up)
-    await fetch('https://api.spotify.com/v1/me/player', {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${config.spotifyToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ device_ids: [selectedDevice] })
-    }).catch(() => {});
-    const r = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${selectedDevice}`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${config.spotifyToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(currentResult.trackUris ? { uris: currentResult.trackUris } : { context_uri: currentResult.uri })
-    });
-    if (r.status === 204 || r.ok) {
+    if (!currentResult.trackUris && !currentResult.uri) {
+      showToast('No playable content — try Build Playlist');
+      btn.disabled = false; spinner.style.display = 'none';
+      icon.style.display = 'inline'; icon.textContent = '\u25B6';
+      return;
+    }
+    const playBody = currentResult.trackUris ? { uris: currentResult.trackUris } : { context_uri: currentResult.uri };
+    const playResult = await spotifyPlay(selectedDevice, playBody);
+    if (playResult.ok) {
       btn.classList.add('playing');
       icon.style.display = 'inline'; icon.textContent = '\u266B';
       spinner.style.display = 'none';
@@ -2577,10 +2629,14 @@ async function playOnDevice() {
       const devName = config.devices.find(d => d.id === selectedDevice)?.name || 'device';
       setStatus('active', `Playing on ${devName}`);
       setTimeout(() => { hideResult(); resumeScan(); }, 3000);
-    } else { throw new Error(`${r.status}`); }
+    } else {
+      setStatus('error', playResult.error);
+      showToast(playResult.error);
+    }
   } catch(e) {
-    setStatus('error', `Playback failed: ${e.message}`);
-    showToast('Playback failed — check device');
+    console.error('playOnDevice error:', e);
+    setStatus('error', e.message);
+    showToast(e.message || 'Playback failed');
   } finally {
     btn.disabled = false; spinner.style.display = 'none';
     if (!btn.classList.contains('playing')) {
@@ -2622,32 +2678,21 @@ async function playOnDeviceDetail() {
   spinner.style.display = 'block'; txt.textContent = 'Starting...';
 
   try {
-    // Determine playback body: trackUris > playlist > album URI
     let playBody;
     if (detailAlbum.trackUris?.length) playBody = { uris: detailAlbum.trackUris };
     else if (detailAlbum.playlistUri) playBody = { context_uri: detailAlbum.playlistUri };
     else playBody = { context_uri: detailAlbum.uri };
 
-    // Transfer playback to device first (wakes it up)
-    await fetch('https://api.spotify.com/v1/me/player', {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${config.spotifyToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ device_ids: [selectedDevice] })
-    }).catch(() => {});
-    const r = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${selectedDevice}`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${config.spotifyToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(playBody)
-    });
-    if (r.status === 204 || r.ok) {
+    const playResult = await spotifyPlay(selectedDevice, playBody);
+    if (playResult.ok) {
       btn.classList.add('playing');
       icon.style.display = 'inline'; icon.textContent = '\u266B';
       spinner.style.display = 'none'; txt.textContent = 'Now Playing';
       const devName = config.devices.find(d => d.id === selectedDevice)?.name || 'device';
       setStatus('active', `Playing on ${devName}`);
-    } else { throw new Error(`${r.status}`); }
-  } catch(e) {
-    showToast('Playback failed — check device');
+    } else {
+      showToast(playResult.error);
+    }
   } finally {
     btn.disabled = false; spinner.style.display = 'none';
     if (!btn.classList.contains('playing')) {
