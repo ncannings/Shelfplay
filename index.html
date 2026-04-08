@@ -827,7 +827,7 @@
 </style>
 <!-- Google Analytics (consent mode) — Replace GA_ID with your own Measurement ID or remove this block -->
 <script>
-var GA_ID = 'G-EW8FW7EPE8'; // CONFIGURE: Your Google Analytics Measurement ID
+var GA_ID = ''; // CONFIGURE: Your Google Analytics Measurement ID (e.g. 'G-XXXXXXXXXX')
 window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 if (GA_ID) {
@@ -1176,10 +1176,10 @@ let scannerPaused = false; // true when result card is showing
 
 // ─── CONFIGURATION — Customise these for your own deployment ─────────────────
 let SPOTIFY_CLIENT_ID = ''; // Loaded from server at startup — set via: wrangler secret put SPOTIFY_CLIENT_ID
-const GA_MEASUREMENT_ID = 'G-EW8FW7EPE8'; // Your Google Analytics ID (or '' to disable)
-const OPERATOR_NAME = 'Researchmatic Limited'; // Your company/name for the About section
-const PRIVACY_URL = 'https://researchmatic.com/privacy'; // Your privacy policy URL
-const TERMS_URL = 'https://researchmatic.com/terms'; // Your terms of service URL
+const GA_MEASUREMENT_ID = ''; // Your Google Analytics ID (e.g. 'G-XXXXXXXXXX'), or '' to disable
+const OPERATOR_NAME = ''; // Your company/name for the About section
+const PRIVACY_URL = ''; // Your privacy policy URL (e.g. 'https://example.com/privacy')
+const TERMS_URL = ''; // Your terms of service URL (e.g. 'https://example.com/terms')
 // ─────────────────────────────────────────────────────────────────────────────
 
 const LIBRARY_KEY = 'shelfplay_library';
@@ -3172,7 +3172,7 @@ async function shareFamilyCode() {
   const shareData = {
     title: 'Join my ShelfPlay family',
     text: `Join my ShelfPlay family library! Code: ${code}`,
-    url: 'https://shelfplay.stream/'
+    url: window.location.origin + '/'
   };
   try {
     if (navigator.share) {

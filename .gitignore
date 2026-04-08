@@ -26,5 +26,8 @@ desktop.ini
 icon-datauri.txt
 icon.png
 
+# Deploy script (contains your config)
+deploy.sh
+
 # Legacy stub (not used)
 worker.js
