@@ -34,7 +34,6 @@ cd Shelfplay
 Edit the configuration constants at the top of `index.html`:
 
 ```javascript
-const SPOTIFY_CLIENT_ID = 'your-spotify-client-id';
 const GA_MEASUREMENT_ID = '';  // Your GA4 ID, or '' to disable analytics
 const OPERATOR_NAME = 'Your Name or Company';
 const PRIVACY_URL = 'https://your-site.com/privacy';
@@ -42,6 +41,8 @@ const TERMS_URL = 'https://your-site.com/terms';
 ```
 
 Also update the `GA_ID` variable in the `<head>` section (or remove the GA script block entirely if you don't want analytics).
+
+The Spotify Client ID is loaded from the server at startup (set via `wrangler secret put SPOTIFY_CLIENT_ID`) — it is not hardcoded in the source.
 
 ### Step 2: Create a Spotify app
 

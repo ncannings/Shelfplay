@@ -1,3 +1,10 @@
+    // ─── Spotify client config (public, needed for browser OAuth) ────
+    if (path === '/api/config' && request.method === 'GET') {
+      return new Response(JSON.stringify({ spotify_client_id: env.SPOTIFY_CLIENT_ID || '' }), {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', ...corsHeaders },
+      });
+    }
+
     // ─── Spotify token exchange ───────────────────────────────────────
     if (path === '/api/token' && request.method === 'POST') {
       try {

@@ -1141,7 +1141,7 @@ let detailAlbum = null; // album shown in detail panel
 let scannerPaused = false; // true when result card is showing
 
 // ─── CONFIGURATION — Customise these for your own deployment ─────────────────
-const SPOTIFY_CLIENT_ID = 'dd1a3bac572d42ae81d9a43860a4135d'; // Create yours at https://developer.spotify.com/dashboard
+let SPOTIFY_CLIENT_ID = ''; // Loaded from server at startup — set via: wrangler secret put SPOTIFY_CLIENT_ID
 const GA_MEASUREMENT_ID = 'G-EW8FW7EPE8'; // Your Google Analytics ID (or '' to disable)
 const OPERATOR_NAME = 'Researchmatic Limited'; // Your company/name for the About section
 const PRIVACY_URL = 'https://researchmatic.com/privacy'; // Your privacy policy URL
@@ -1496,6 +1496,13 @@ function dismissInstall() {
 }
 
 window.addEventListener('load', async () => {
+  // Load Spotify client ID from server
+  try {
+    const cfgR = await fetch('/api/config');
+    const cfgD = await cfgR.json();
+    if (cfgD.spotify_client_id) SPOTIFY_CLIENT_ID = cfgD.spotify_client_id;
+  } catch(e) { console.warn('Failed to load config:', e); }
+
   initCookieConsent();
   loadSettings();
 
