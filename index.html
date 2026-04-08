@@ -1411,9 +1411,20 @@ async function fetchSpotifyDevices() {
         '<div class="settings-info">No active devices found. Make sure Spotify is playing on at least one device.</div>';
       showToast('No active Spotify devices');
     } else {
+      // Auto-update any saved devices whose IDs have changed
+      devices.forEach(liveDev => {
+        const savedByName = config.devices.find(d => d.name === liveDev.name && d.id !== liveDev.id);
+        if (savedByName) {
+          console.log(`Device "${liveDev.name}" ID updated: ${savedByName.id} → ${liveDev.id}`);
+          savedByName.id = liveDev.id;
+          if (selectedDevice === savedByName.id) selectedDevice = liveDev.id;
+        }
+      });
+      localStorage.setItem('shelfplay_config', JSON.stringify(config));
+
       let html = '';
       devices.forEach(dev => {
-        const isSelected = config.devices.some(d => d.id === dev.id);
+        const isSelected = config.devices.some(d => d.id === dev.id || d.name === dev.name);
         const typeLabel = dev.type === 'Speaker' ? 'Speaker' : dev.type === 'Smartphone' ? 'Phone' : dev.type;
         html += `<div class="device-list-item">
           <span class="dev-icon">${dev.type === 'Speaker' ? '&#128266;' : dev.type === 'Smartphone' ? '&#128241;' : '&#128187;'}</span>
@@ -2229,12 +2240,20 @@ async function searchSpotifyByUPC(upc) {
 async function fetchCoverArt(mbid) {
   if (!mbid) return null;
   try {
-    // Cover Art Archive redirects; just construct the URL directly
-    const small = `https://coverartarchive.org/release/${mbid}/front-250`;
-    const large = `https://coverartarchive.org/release/${mbid}/front-500`;
-    // Verify it exists with a HEAD request
-    const r = await fetch(small, { method: 'HEAD', signal: AbortSignal.timeout(4000) });
-    if (r.ok || r.status === 307) return { image: small, imageLarge: large };
+    // Fetch the CAA JSON to verify cover exists and get the actual image URL
+    const r = await fetch(`https://coverartarchive.org/release/${mbid}/`, {
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(5000)
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const front = (d.images || []).find(img => img.front);
+    if (front?.thumbnails) {
+      return {
+        image: (front.thumbnails['250'] || front.thumbnails.small || '').replace('http://', 'https://'),
+        imageLarge: (front.thumbnails['500'] || front.thumbnails.large || '').replace('http://', 'https://')
+      };
+    }
   } catch(e) { console.warn('Cover Art Archive lookup failed:', e); }
   return null;
 }
@@ -2510,7 +2529,6 @@ async function captureCover() {
 
 // ─── Spotify Play Helper (wake device + retry) ──────────────────────────────
 async function resolveDeviceId(savedDeviceId) {
-  // Fetch current active devices and match by name (IDs can change)
   const headers = { 'Authorization': `Bearer ${config.spotifyToken}` };
   try {
     const r = await fetch('https://api.spotify.com/v1/me/player/devices', {
@@ -2518,26 +2536,30 @@ async function resolveDeviceId(savedDeviceId) {
     });
     const d = await r.json();
     const devices = d.devices || [];
-    console.log('Active Spotify devices:', devices.map(d => `${d.name} (${d.id}) ${d.is_active ? 'ACTIVE' : ''}`));
 
-    // First try exact ID match
-    const exact = devices.find(d => d.id === savedDeviceId);
-    if (exact) return exact.id;
-
-    // Then try name match (device reconnected with new ID)
+    // Find the saved device config to get its name
     const savedDev = config.devices.find(d => d.id === savedDeviceId);
-    if (savedDev) {
-      const byName = devices.find(d => d.name === savedDev.name);
-      if (byName) {
-        // Update the saved device ID
-        savedDev.id = byName.id;
+    const savedName = savedDev?.name || '';
+
+    // Look for the device — prefer name match (IDs change), fall back to ID match
+    const byName = savedName ? devices.find(d => d.name === savedName) : null;
+    const byId = devices.find(d => d.id === savedDeviceId);
+    const resolved = byName || byId;
+
+    if (resolved) {
+      // Update saved config if ID changed
+      if (resolved.id !== savedDeviceId && savedDev) {
+        savedDev.id = resolved.id;
+        selectedDevice = resolved.id;
         localStorage.setItem('shelfplay_config', JSON.stringify(config));
-        console.log(`Device "${savedDev.name}" ID updated: ${savedDeviceId} → ${byName.id}`);
-        return byName.id;
       }
+      return resolved.id;
     }
+
+    // Device not in list at all — return saved ID as last resort
+    return savedDeviceId;
   } catch(e) { console.warn('Device resolve failed:', e); }
-  return savedDeviceId; // Fall back to saved ID
+  return savedDeviceId;
 }
 
 async function spotifyPlay(deviceId, playBody) {

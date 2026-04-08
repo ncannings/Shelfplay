@@ -2,6 +2,18 @@
 
 Scan vinyl records and CDs by barcode or album cover, then play them on Spotify. A progressive web app powered by Cloudflare Workers.
 
+## See It In Action
+
+### Self-hosted (full Spotify control)
+Scan a barcode, identify the album, and play directly on Alexa — all in seconds.
+
+https://github.com/ncannings/Shelfplay/raw/main/videos/self_hosted_version.MP4
+
+### Web version (no setup required)
+Scan and identify albums, then open them in Spotify.
+
+https://github.com/ncannings/Shelfplay/raw/main/videos/web_version.MP4
+
 ## Try It
 
 **[shelfplay.stream](https://shelfplay.stream)** — open on your phone, install as a PWA, and start scanning.
