@@ -1,0 +1,30 @@
+# Secrets and credentials
+.secrets
+.env
+.env.*
+*.local.json
+
+# Build output (regenerated from index.html + worker-routes.js)
+shelfplay-worker.js
+
+# Cloudflare
+.wrangler/
+wrangler.toml
+
+# Claude Code
+.claude/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Generated artifacts
+icon-datauri.txt
+icon.png
+
+# Legacy stub (not used)
+worker.js

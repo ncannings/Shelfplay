@@ -1,0 +1,12 @@
+name = "shelfplay"
+main = "shelfplay-worker.js"
+compatibility_date = "2024-01-01"
+account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
+
+routes = [
+  { pattern = "your-domain.com", custom_domain = true }
+]
+
+[[kv_namespaces]]
+binding = "SHELFPLAY_KV"
+id = "YOUR_KV_NAMESPACE_ID"
