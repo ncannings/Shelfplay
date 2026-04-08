@@ -2,6 +2,23 @@
 
 Scan vinyl records and CDs by barcode or album cover, then play them on Spotify. A progressive web app powered by Cloudflare Workers.
 
+## Try It
+
+**[shelfplay.stream](https://shelfplay.stream)** — open on your phone, install as a PWA, and start scanning.
+
+The hosted version is free to use with these limitations:
+
+| Feature | Hosted (shelfplay.stream) | Self-hosted |
+|---------|--------------------------|-------------|
+| Barcode scanning | Unlimited | Unlimited |
+| Cover art recognition | Requires your own Gemini API key | Requires your own Gemini API key |
+| Spotify playback | Open in Spotify (deep link) | Direct device control (Play on Alexa, etc.) |
+| Spotify playlist building | Requires your own Spotify app | Full control |
+| Family sharing | Available | Available |
+| Cloud library sync | Shared infrastructure | Your own KV store |
+
+To get the full experience — direct playback to your speakers, playlist creation, Spotify library integration — deploy your own instance. It takes about 10 minutes and costs nothing.
+
 ## Features
 
 - **Barcode scanning** — point your camera at a UPC/EAN barcode to identify albums via MusicBrainz and Discogs
