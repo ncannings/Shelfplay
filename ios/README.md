@@ -20,12 +20,13 @@ A native SwiftUI version of ShelfPlay. Scan a record's barcode or photograph its
 4. Hypotheses are searched in Apple Music (and Spotify, if connected).
 5. Candidates are re-ranked by agreement with the printed text and by how closely their artwork matches your photo. Runners-up are offered under "Not this one?".
 
-Without Apple Intelligence (older iPhones, or when it's turned off), step 3 falls back to a heuristic based on text size. Covers with no text at all can only be matched if they're already on your shelf; use the barcode or search for those.
+Without Apple Intelligence (iOS 18–25, older iPhones, or when it's turned off), step 3 falls back to a heuristic based on text size. Covers with no text at all can only be matched if they're already on your shelf; use the barcode or search for those.
 
 ## Requirements
 
-- Xcode 26+, iOS 26+
-- iPhone 15 Pro or later with Apple Intelligence enabled, for the best cover matching
+- Xcode 26+, iOS 18+
+- Apple Intelligence (iOS 26, iPhone 15 Pro or later) for the best cover matching; older iPhones use a text-size heuristic
+- Spotify connect is hidden until unlocked with the worker's `ADMIN_CODE` (tap the version number in Settings 5 times): Spotify's development mode allows only 5 accounts
 
 ## Setup
 

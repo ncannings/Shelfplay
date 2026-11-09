@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>
+  // Home-screen installs of the web app open "/"; send them straight to the app.
+  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+    location.replace('/app' + location.search);
+  }
+</script>
+<title>ShelfPlay — Scan your vinyl and CDs, play them on Apple Music or Spotify</title>
+<meta name="description" content="Point your iPhone at a record or CD — the barcode or the cover — and ShelfPlay finds it on Apple Music or Spotify. Cover recognition runs on-device with Apple Intelligence. Free.">
+<link rel="canonical" href="%%ORIGIN%%/">
+<meta name="theme-color" content="#0c0a09">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ShelfPlay">
+<meta property="og:title" content="ShelfPlay — Your record shelf, ready to play">
+<meta property="og:description" content="Scan a vinyl record or CD by barcode or cover and play it instantly on Apple Music or Spotify.">
+<meta property="og:url" content="%%ORIGIN%%/">
+<meta property="og:image" content="%%ORIGIN%%/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ShelfPlay — Your record shelf, ready to play">
+<meta name="twitter:description" content="Scan a vinyl record or CD by barcode or cover and play it instantly on Apple Music or Spotify.">
+<meta name="twitter:image" content="%%ORIGIN%%/og.jpg">
+<link rel="stylesheet" href="/site.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "MobileApplication",
+      "name": "ShelfPlay",
+      "operatingSystem": "iOS 18 or later",
+      "applicationCategory": "MusicApplication",
+      "description": "Scan vinyl records and CDs by barcode or album cover and play them on Apple Music or Spotify. Cover recognition runs on-device with Apple Intelligence.",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" },
+      "url": "%%ORIGIN%%/",
+      "image": "%%ORIGIN%%/og.jpg"
+    },
+    {
+      "@type": "WebApplication",
+      "name": "ShelfPlay web app",
+      "browserRequirements": "Requires a modern browser with camera access",
+      "applicationCategory": "MusicApplication",
+      "operatingSystem": "Any",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "GBP" },
+      "url": "%%ORIGIN%%/app"
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        { "@type": "Question", "name": "Is ShelfPlay free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. The iPhone app and the web app are free, with no ads and no account to create." } },
+        { "@type": "Question", "name": "Do I need Apple Intelligence?", "acceptedAnswer": { "@type": "Answer", "text": "No. ShelfPlay runs on iOS 18 and later. On iPhones with Apple Intelligence (iOS 26), cover recognition is smarter because the on-device model interprets the text on the sleeve. Barcode scanning works on every iPhone." } },
+        { "@type": "Question", "name": "Why can't everyone connect Spotify?", "acceptedAnswer": { "@type": "Answer", "text": "Spotify only lets apps in development connect five Spotify accounts. Opening the whole Spotify connection to everyone requires an app to reach 250,000 monthly active users. Until then, everyone can open albums in the Spotify app, and Apple Music works fully." } },
+        { "@type": "Question", "name": "Are my photos uploaded?", "acceptedAnswer": { "@type": "Answer", "text": "No. In the iPhone app, cover photos are processed on your iPhone. Only the artist and album text is used to search music catalogues." } },
+        { "@type": "Question", "name": "Does it work with CDs and cassettes?", "acceptedAnswer": { "@type": "Answer", "text": "It works with anything that has a retail barcode or a recognisable cover — vinyl, CDs and cassettes." } }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="wordmark" href="/">ShelfPlay</a>
+    <nav class="nav" aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#iphone">iPhone app</a>
+      <a href="#spotify">Spotify</a>
+      <a href="#faq">FAQ</a>
+      <a class="btn btn-primary btn-small" href="/app">Open web app</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap grid-2">
+      <div>
+        <p class="eyebrow">For vinyl, CDs and cassettes</p>
+        <h1>Your record shelf, ready to play.</h1>
+        <p class="lead">Point your phone at a record — the barcode or the cover — and ShelfPlay finds it on Apple Music or Spotify, so you can play it in a tap. Keep it on the shelf, play it anywhere.</p>
+        <div class="cta-row">
+          %%APP_STORE_BADGE%%
+          <a class="btn btn-ghost" href="/app">Try the web app</a>
+        </div>
+        <p class="fineprint">Free · No account · iPhone app needs iOS 18 or later</p>
+      </div>
+      <div aria-hidden="true">
+        <div class="phone">
+          <div class="screen"></div>
+          <div class="island"></div>
+          <div class="app-title">ShelfPlay</div>
+          <div class="sleeve"></div>
+          <div class="finder"></div>
+          <div class="pill">Hold steady…</div>
+          <div class="result">
+            <div class="art"></div>
+            <div><b>Found it</b><span>Identified with Apple Intelligence</span></div>
+            <div class="play">▶</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <p class="eyebrow">How it works</p>
+      <h2>Scan. Match. Play.</h2>
+      <div class="grid-3" style="margin-top:32px">
+        <div class="card">
+          <div class="step-num">1</div>
+          <h3>Scan the barcode or the cover</h3>
+          <p>Barcodes are read instantly. No barcode? Hold the sleeve up — ShelfPlay spots it and takes the picture for you.</p>
+        </div>
+        <div class="card">
+          <div class="step-num">2</div>
+          <h3>We find the exact release</h3>
+          <p>ShelfPlay checks Apple Music, Spotify and MusicBrainz — and tells you when your pressing differs from the streaming version.</p>
+        </div>
+        <div class="card">
+          <div class="step-num">3</div>
+          <h3>Play it</h3>
+          <p>Play straight away in Apple Music, open it in Spotify, or play your disc’s exact tracklist — even for compilations that streaming services list differently.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="iphone">
+    <div class="wrap">
+      <p class="eyebrow">The iPhone app</p>
+      <h2>Built for iPhone. Private by design.</h2>
+      <p class="lead">The native app is the best way to use ShelfPlay — faster scanning, smarter cover recognition and Apple Music built in.</p>
+      <div class="cards" style="margin-top:32px">
+        <div class="card">
+          <div class="icon">✦</div>
+          <h3>Apple Intelligence</h3>
+          <p>On iPhones with Apple Intelligence, an on-device model reads the sleeve and works out the artist and album — even with stylised lettering.</p>
+        </div>
+        <div class="card">
+          <div class="icon">◎</div>
+          <h3>Auto-capture</h3>
+          <p>Hold a cover in the square and ShelfPlay takes the picture when it’s steady. Prefer control? Switch to manual.</p>
+        </div>
+        <div class="card">
+          <div class="icon">♫</div>
+          <h3>Apple Music, built in</h3>
+          <p>With an Apple Music subscription, records play right inside ShelfPlay. Without one, they open in the Music app.</p>
+        </div>
+        <div class="card">
+          <div class="icon">⌂</div>
+          <h3>Nothing leaves your phone</h3>
+          <p>Cover photos are processed on your iPhone. No account, no tracking, no ads.</p>
+        </div>
+        <div class="card">
+          <div class="icon">≡</div>
+          <h3>Your disc, exactly</h3>
+          <p>Regional editions and compilations often differ from the streaming album. ShelfPlay can play your disc’s actual tracklist.</p>
+        </div>
+        <div class="card">
+          <div class="icon">⇄</div>
+          <h3>Family shelf</h3>
+          <p>Share one shelf with your household using a family code — it works across the iPhone app and the web app.</p>
+        </div>
+      </div>
+      <div class="cta-row">%%APP_STORE_BADGE%%</div>
+    </div>
+  </section>
+
+  <section id="spotify">
+    <div class="wrap">
+      <div class="rally">
+        <p class="eyebrow">Help us unlock Spotify</p>
+        <h2>Full Spotify control needs 250,000 of us.</h2>
+        <p class="lead">Spotify only lets apps in development connect <strong>five</strong> Spotify accounts. To switch on the full Spotify connection for everyone, Spotify requires an app to reach <strong>250,000 monthly active users</strong>. Every person who scans their shelf with ShelfPlay gets us closer.</p>
+        <div class="compare">
+          <div class="card">
+            <h3>Everyone, today</h3>
+            <ul>
+              <li>Identify any record by barcode or cover</li>
+              <li>Open the album in the Spotify app</li>
+              <li>Full playback with Apple Music</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Unlocked at 250,000 users</h3>
+            <ul>
+              <li>Play straight to Spotify speakers — Sonos, Alexa, your TV</li>
+              <li>Build playlists from your disc’s exact tracklist</li>
+              <li>Save scans to your Spotify library automatically</li>
+            </ul>
+          </div>
+        </div>
+        <div class="cta-row">
+          <button class="btn btn-primary" id="share" type="button">Share ShelfPlay</button>
+          <span class="muted" id="shareNote" role="status"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="web">
+    <div class="wrap grid-2">
+      <div>
+        <p class="eyebrow">Not on iPhone?</p>
+        <h2>Use the web app on any phone.</h2>
+        <p class="lead">The ShelfPlay web app runs in the browser on Android and desktop. Scan barcodes, build your shelf and open albums in Spotify — add it to your home screen for an app-like experience.</p>
+        <div class="cta-row"><a class="btn btn-primary" href="/app">Open the web app</a></div>
+      </div>
+      <div class="card">
+        <h3>Web app vs iPhone app</h3>
+        <p style="margin-top:8px">Both are free. The iPhone app adds on-device cover recognition, auto-capture and built-in Apple Music playback. The web app can recognise covers too if you add your own Google Gemini API key.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap" style="max-width:820px">
+      <p class="eyebrow">FAQ</p>
+      <h2>Questions</h2>
+      <div style="margin-top:28px">
+        <details><summary>Is ShelfPlay free?</summary><p>Yes. The iPhone app and the web app are free, with no ads and no account to create.</p></details>
+        <details><summary>Do I need Apple Intelligence?</summary><p>No. ShelfPlay runs on iOS 18 and later. On iPhones with Apple Intelligence (iOS 26), cover recognition is smarter because the on-device model interprets the text on the sleeve. Barcode scanning works on every iPhone.</p></details>
+        <details><summary>Why can’t everyone connect Spotify?</summary><p>Spotify only lets apps in development connect five Spotify accounts. Opening the whole Spotify connection to everyone requires an app to reach 250,000 monthly active users. Until then, everyone can open albums in the Spotify app, and Apple Music works fully.</p></details>
+        <details><summary>Are my photos uploaded?</summary><p>No. In the iPhone app, cover photos are processed on your iPhone. Only the artist and album text is used to search music catalogues. See the <a href="/privacy">privacy policy</a>.</p></details>
+        <details><summary>Does it work with CDs and cassettes?</summary><p>It works with anything that has a retail barcode or a recognisable cover — vinyl, CDs and cassettes.</p></details>
+        <details><summary>What if it picks the wrong album?</summary><p>ShelfPlay shows the closest alternatives under “Not this one?” — tap the right one and it remembers your choice.</p></details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>© %%YEAR%% %%OPERATOR_NAME%%</div>
+    <nav aria-label="Footer">
+      <a href="/app">Web app</a>
+      <a href="/support">Support</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="https://github.com/ncannings/Shelfplay">GitHub</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+  document.getElementById('share').addEventListener('click', async () => {
+    const note = document.getElementById('shareNote');
+    const data = { title: 'ShelfPlay', text: 'Scan your records and play them on Apple Music or Spotify.', url: location.origin + '/' };
+    try {
+      if (navigator.share) { await navigator.share(data); return; }
+      await navigator.clipboard.writeText(data.url);
+      note.textContent = 'Link copied — thanks for sharing!';
+    } catch (e) {
+      if (e && e.name !== 'AbortError') note.textContent = data.url;
+    }
+  });
+</script>
+</body>
+</html>

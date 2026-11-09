@@ -1242,7 +1242,7 @@ async function handleOAuthCallback() {
 
   if (error) {
     showToast('Spotify auth denied: ' + error);
-    window.history.replaceState({}, '', '/');
+    window.history.replaceState({}, '', '/app');
     return;
   }
   if (!code) return;
@@ -1250,7 +1250,7 @@ async function handleOAuthCallback() {
   const verifier = localStorage.getItem('spotify_code_verifier');
   if (!verifier) {
     showToast('Auth state lost — try again');
-    window.history.replaceState({}, '', '/');
+    window.history.replaceState({}, '', '/app');
     return;
   }
 
@@ -1289,7 +1289,7 @@ async function handleOAuthCallback() {
     showToast('Spotify auth failed — try again');
   }
 
-  window.history.replaceState({}, '', '/');
+  window.history.replaceState({}, '', '/app');
   updateSpotifyUI();
   scheduleTokenRefresh();
 }
@@ -1475,12 +1475,12 @@ function initCookieConsent() {
   const opEl = document.getElementById('operatorInfo');
   if (opEl && OPERATOR_NAME) {
     let html = 'Operated by <strong>' + escHtml(OPERATOR_NAME) + '</strong>';
-    if (PRIVACY_URL) html += '<br><a href="' + PRIVACY_URL + '" target="_blank" rel="noopener">Privacy Policy</a>';
-    if (TERMS_URL) html += ' &middot; <a href="' + TERMS_URL + '" target="_blank" rel="noopener">Terms of Service</a>';
+    html += '<br><a href="' + (PRIVACY_URL || '/privacy') + '" target="_blank" rel="noopener">Privacy Policy</a>';
+    html += ' &middot; <a href="' + (TERMS_URL || '/terms') + '" target="_blank" rel="noopener">Terms of Service</a>';
     opEl.innerHTML = html;
   }
   const cookieLink = document.getElementById('cookiePrivacyLink');
-  if (cookieLink && PRIVACY_URL) cookieLink.href = PRIVACY_URL;
+  if (cookieLink) cookieLink.href = PRIVACY_URL || '/privacy';
 
   // GA consent
   if (!GA_ID) return; // No GA = no cookie banner needed
