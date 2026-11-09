@@ -8,6 +8,11 @@ struct ScannerView: View {
     @State private var cameraChecked = false
     @State private var photoItem: PhotosPickerItem?
     @State private var flash = false
+    @State private var coverDetection: CoverDetection = .searching
+    @State private var barcodeArmedUntil: Date?
+
+    private var auto: Bool { model.settings.autoCapture }
+    private var barcodeArmed: Bool { (barcodeArmedUntil ?? .distantPast) > .now }
 
     var body: some View {
         @Bindable var model = model
@@ -43,10 +48,18 @@ struct ScannerView: View {
         .animation(.easeInOut(duration: 0.2), value: model.busyMessage)
         .task {
             camera.onBarcode = { code in
-                guard model.mode == .barcode, !model.scannerPaused else { return }
+                guard model.mode == .barcode, !model.scannerPaused, auto || barcodeArmed else { return }
+                barcodeArmedUntil = nil
                 Task { await model.handleBarcode(code) }
             }
+            camera.onCoverDetection = { state in
+                coverDetection = state
+                if state == .ready, model.mode == .cover, auto, !model.scannerPaused, cameraRunning {
+                    capture()
+                }
+            }
             cameraRunning = await camera.start()
+            syncDetection()
             cameraChecked = true
             #if DEBUG
             // Debug hook for headless testing: -ShelfPlayCoverTest /path/to/cover.jpg
@@ -59,9 +72,11 @@ struct ScannerView: View {
             #endif
         }
         .onChange(of: model.mode) { _, mode in
-            camera.detectsBarcodes = mode == .barcode
             model.status = mode == .barcode ? "Point at a barcode" : "Fill the square with the cover"
+            syncDetection()
         }
+        .onChange(of: model.settings.autoCapture) { _, _ in syncDetection() }
+        .onChange(of: model.scannerPaused) { _, _ in syncDetection() }
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
             photoItem = nil
@@ -97,21 +112,66 @@ struct ScannerView: View {
         .padding(.top, 8)
     }
 
+    private var holdProgress: Double {
+        switch coverDetection {
+        case .searching: 0
+        case .holding(let p): p
+        case .ready: 1
+        }
+    }
+
+    private var hint: String {
+        switch model.mode {
+        case .barcode:
+            if auto { return "Point at the barcode" }
+            return barcodeArmed ? "Scanning…" : "Tap the shutter to scan a barcode"
+        case .cover:
+            guard auto else { return "Fill the square, then tap the shutter" }
+            switch coverDetection {
+            case .searching: return "Hold the cover inside the square"
+            case .holding: return "Hold steady…"
+            case .ready: return "Got it"
+            }
+        }
+    }
+
     private var viewfinder: some View {
         GeometryReader { geo in
             let w = geo.size.width - 64
             let size = model.mode == .cover ? CGSize(width: w, height: w) : CGSize(width: w, height: w * 0.45)
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(Theme.amber.opacity(0.85), style: StrokeStyle(lineWidth: 3, dash: model.mode == .cover ? [] : [14, 8]))
-                .frame(width: size.width, height: size.height)
-                .position(x: geo.size.width / 2, y: geo.size.height * 0.45)
-                .animation(.spring(duration: 0.35), value: model.mode)
+            let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
+            let found = model.mode == .cover && auto && holdProgress > 0
+            ZStack {
+                shape.strokeBorder(Theme.amber.opacity(found ? 0.35 : 0.85),
+                                   style: StrokeStyle(lineWidth: 3, dash: model.mode == .cover ? [] : [14, 8]))
+                if found {
+                    shape.inset(by: 1.5)
+                        .trim(from: 0, to: holdProgress)
+                        .stroke(Theme.amber, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                        .animation(.linear(duration: 0.15), value: holdProgress)
+                }
+                if model.mode == .barcode && barcodeArmed {
+                    shape.strokeBorder(Theme.amber, lineWidth: 6)
+                }
+            }
+            .frame(width: size.width, height: size.height)
+            .position(x: geo.size.width / 2, y: geo.size.height * 0.45)
+            .animation(.spring(duration: 0.35), value: model.mode)
+
+            Text(hint)
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(.ultraThinMaterial, in: Capsule())
+                .position(x: geo.size.width / 2, y: geo.size.height * 0.45 + size.height / 2 + 28)
+                .animation(.easeInOut(duration: 0.2), value: hint)
         }
         .allowsHitTesting(false)
     }
 
     private var bottomControls: some View {
         @Bindable var model = model
+        @Bindable var settings = model.settings
+        let showShutter = model.mode == .cover || !auto
         return VStack(spacing: 18) {
             Picker("Mode", selection: $model.mode) {
                 ForEach(ScanMode.allCases) { Text($0.rawValue).tag($0) }
@@ -122,15 +182,18 @@ struct ScannerView: View {
             HStack {
                 CircleButton(systemImage: "square.stack", label: "Library") { model.sheet = .library }
                 Spacer()
-                if model.mode == .cover {
+                if showShutter {
                     Button(action: capture) {
                         ZStack {
                             Circle().fill(Theme.amberGradient).frame(width: 72, height: 72)
                             Circle().strokeBorder(.white.opacity(0.9), lineWidth: 3).frame(width: 84, height: 84)
+                            if model.mode == .barcode {
+                                Image(systemName: "barcode.viewfinder").font(.system(size: 28, weight: .semibold)).foregroundStyle(.black)
+                            }
                         }
                     }
                     .disabled(!cameraRunning || model.isBusy)
-                    .accessibilityLabel("Identify cover")
+                    .accessibilityLabel(model.mode == .cover ? "Identify cover" : "Scan barcode")
                 } else {
                     CircleButton(systemImage: "magnifyingglass", label: "Search", size: 64) { model.sheet = .search }
                 }
@@ -145,13 +208,28 @@ struct ScannerView: View {
             }
             .padding(.horizontal, 32)
 
-            HStack {
-                Spacer()
+            HStack(spacing: 22) {
+                Button {
+                    settings.autoCapture.toggle()
+                    UISelectionFeedbackGenerator().selectionChanged()
+                } label: {
+                    Label(auto ? "Auto" : "Manual", systemImage: auto ? "bolt.badge.automatic" : "hand.tap")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(auto ? Theme.amber.opacity(0.2) : Color.white.opacity(0.1), in: Capsule())
+                }
+                .foregroundStyle(auto ? Theme.amber : .white)
+                .accessibilityHint("Switches between automatic and shutter-only scanning")
+                if showShutter {
+                    Button { model.sheet = .search } label: {
+                        Label("Search", systemImage: "magnifyingglass").font(.footnote.weight(.medium))
+                    }
+                    .foregroundStyle(Theme.textSecondary)
+                }
                 Button { model.sheet = .settings } label: {
                     Label("Settings", systemImage: "gearshape").font(.footnote.weight(.medium))
                 }
                 .foregroundStyle(Theme.textSecondary)
-                Spacer()
             }
         }
         .padding(.bottom, 12)
@@ -174,7 +252,26 @@ struct ScannerView: View {
         .padding(32)
     }
 
+    private func syncDetection() {
+        let active = cameraRunning && !model.scannerPaused
+        camera.detectsBarcodes = model.mode == .barcode
+        camera.detectsCovers = active && model.mode == .cover && auto
+        if !camera.detectsCovers { coverDetection = .searching }
+    }
+
     private func capture() {
+        if model.mode == .barcode {
+            // Manual barcode: take the next barcode seen in the next few seconds.
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            let until = Date.now.addingTimeInterval(4)
+            barcodeArmedUntil = until
+            Task {
+                try? await Task.sleep(for: .seconds(4.1))
+                if barcodeArmedUntil == until { barcodeArmedUntil = nil; model.show("No barcode seen — try again") }
+            }
+            return
+        }
+        guard !model.isBusy else { return }
         flash = true
         Task {
             try? await Task.sleep(for: .milliseconds(120))

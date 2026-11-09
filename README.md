@@ -138,11 +138,20 @@ If you used `custom_domain = true` in your routes, Cloudflare automatically crea
 ## Architecture
 
 ```
-index.html          — The entire SPA (HTML + CSS + JS, single file)
+index.html          — The web app (HTML + CSS + JS, single file), served at /app
+site/               — Public site: landing page (/), privacy, terms, support, SEO assets
 worker-routes.js    — Cloudflare Worker API routes
-build-worker.js     — Build script: inlines index.html into the worker
+build-worker.js     — Build script: inlines the web app and site into the worker
+ios/                — Native iPhone app (SwiftUI) — see ios/README.md
 wrangler.toml       — Cloudflare deployment config (not committed)
 icon.svg            — App icon (vinyl record)
+```
+
+The site pages show your operator name (from `OPERATOR_NAME` in `index.html`). Optionally export these before `node build-worker.js`:
+
+```bash
+export SHELFPLAY_CONTACT_EMAIL="support@example.com"   # shown on support/privacy pages
+export SHELFPLAY_APP_STORE_URL="https://apps.apple.com/app/id..."   # turns on the App Store badge
 ```
 
 The build script (`node build-worker.js`) combines `index.html` and `worker-routes.js` into a single `shelfplay-worker.js` that Cloudflare Workers executes. The HTML is served inline — no static file hosting needed.
@@ -151,7 +160,10 @@ The build script (`node build-worker.js`) combines `index.html` and `worker-rout
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/` | GET | - | Serves the SPA |
+| `/` | GET | - | Landing page (installed PWAs redirect to `/app`) |
+| `/app` | GET | - | Serves the web app |
+| `/privacy`, `/terms`, `/support` | GET | - | Site pages |
+| `/robots.txt`, `/sitemap.xml`, `/og.jpg` | GET | - | SEO assets |
 | `/callback` | GET | - | Spotify OAuth callback |
 | `/api/config` | GET | - | Public config (Spotify Client ID) |
 | `/api/token` | POST | - | Spotify token exchange |

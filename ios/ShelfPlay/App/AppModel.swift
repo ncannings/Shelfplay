@@ -62,7 +62,7 @@ final class AppModel {
         spotifyAuth = SpotifyAuth(settings: settings)
         spotify = SpotifyAPI(auth: spotifyAuth)
         appleMusic = AppleMusicService()
-        matcher = CoverMatcher(spotify: spotify)
+        matcher = CoverMatcher(spotify: spotify, appleMusic: appleMusic)
         spotify.onRateLimited = { [weak self] in self?.show($0) }
         Task { await appleMusic.refresh() }
     }
@@ -112,8 +112,8 @@ final class AppModel {
                     album.imageLarge = art.large
                 }
             }
-            if album.spotifyURI == nil, spotify.isConnected, let s = await spotify.searchAlbum(artist: album.artist, title: album.name) {
-                album.merge(s)
+            if album.spotifyURI == nil, spotify.isConnected, let s = await spotify.findAlbum(matching: album) {
+                album.spotifyURI = s.spotifyURI
             }
             present(album)
             return
@@ -159,7 +159,7 @@ final class AppModel {
     /// Album search across Apple Music (always) and Spotify (when connected).
     func lookup(artist: String, title: String) async -> AlbumResult? {
         async let am = Catalog.appleMusicAlbum(artist: artist, title: title)
-        async let sp = spotify.searchAlbum(artist: artist, title: title)
+        async let sp = spotify.findAlbum(matching: AlbumResult(name: title, artist: artist))
         let (a, s) = await (am, sp)
         guard var result = s ?? a else { return nil }
         if let a, s != nil { result.merge(a) }
@@ -246,6 +246,8 @@ final class AppModel {
     /// Swap the presented result for an alternative candidate (removes the wrong one from the shelf).
     func replace(_ wrong: AlbumResult, with right: AlbumResult, in presentation: ResultPresentation) {
         delete(wrong)
+        var right = right
+        right.coverPrintConfirmed = right.coverPrint != nil
         var alts = presentation.alternatives.filter { $0.libraryKey != right.libraryKey }
         alts.insert(wrong, at: 0)
         present(right, alternatives: alts, note: presentation.note)
@@ -261,6 +263,11 @@ final class AppModel {
 
     func play(_ album: AlbumResult, on service: MusicService? = nil) async -> Bool {
         let service = service ?? settings.preferredService
+        if album.coverPrint != nil, !album.coverPrintConfirmed {
+            var confirmed = album
+            confirmed.coverPrintConfirmed = true
+            save(confirmed)
+        }
         do {
             switch service {
             case .appleMusic:
@@ -268,14 +275,14 @@ final class AppModel {
                 status = "Playing \(album.name)"
             case .spotify:
                 guard spotify.isConnected, !settings.spotifyDeviceID.isEmpty else {
-                    openInSpotify(album)
+                    await openInSpotify(album)
                     return true
                 }
                 var body: [String: Any]
                 if let uris = album.trackURIs, !uris.isEmpty { body = ["uris": uris] }
                 else if let p = album.playlistURI { body = ["context_uri": p] }
                 else if let uri = album.spotifyURI { body = ["context_uri": uri] }
-                else { openInSpotify(album); return true }
+                else { await openInSpotify(album); return true }
                 try await spotify.play(deviceID: settings.spotifyDeviceID, deviceName: settings.spotifyDeviceName, body: body).get()
                 status = "Playing on \(settings.spotifyDeviceName.isEmpty ? "Spotify" : settings.spotifyDeviceName)"
             }
@@ -286,20 +293,31 @@ final class AppModel {
         }
     }
 
-    func openInSpotify(_ album: AlbumResult) {
-        let id = (album.playlistURI ?? album.spotifyURI)
+    func openInSpotify(_ album: AlbumResult) async {
+        var album = album
+        if album.spotifyURI == nil, album.playlistURI == nil, spotify.isConnected,
+           let s = await spotify.findAlbum(matching: album) {
+            album.spotifyURI = s.spotifyURI
+            save(album)
+        }
         var urls: [URL] = []
-        if let id { urls.append(URL(string: id)!) }
-        if let p = album.playlistURL, let u = URL(string: p) { urls.append(u) }
-        if let id {
+        if let id = album.playlistURI ?? album.spotifyURI {
+            urls.append(URL(string: id)!)
+            if let p = album.playlistURL, let u = URL(string: p) { urls.append(u) }
             let parts = id.split(separator: ":")
             if parts.count == 3 { urls.append(URL(string: "https://open.spotify.com/\(parts[1])/\(parts[2])")!) }
         } else {
-            let q = "\(album.artist) \(album.name)".addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? ""
+            // Not resolvable without a Spotify login: search by title, adding the artist only when it's a
+            // single credited name (long soundtrack credits drown the title in Spotify's ranking).
+            let segments = TextNormalizer.artistSegments(album.artist)
+            let title = album.name.replacingOccurrences(of: #"[\(\)\[\]]"#, with: " ", options: .regularExpression)
+            let query = (segments.count == 1 && !TextNormalizer.isVariousArtists(album.artist) ? "\(album.artist) \(title)" : title)
+                .split(separator: " ").joined(separator: " ")
+            let q = query.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? ""
             urls.append(URL(string: "https://open.spotify.com/search/\(q)")!)
         }
         let target = urls.first { $0.scheme != "spotify" || UIApplication.shared.canOpenURL($0) } ?? urls.last!
-        UIApplication.shared.open(target)
+        await UIApplication.shared.open(target)
     }
 
     func refreshSpotifyDevices() async {

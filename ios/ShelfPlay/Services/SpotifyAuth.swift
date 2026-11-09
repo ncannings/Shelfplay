@@ -34,13 +34,14 @@ final class SpotifyAuth {
     }
 
     enum AuthError: LocalizedError {
-        case noClientID, stateLost, denied(String), exchange(String)
+        case noClientID, stateLost, denied(String), exchange(String), notInvited
         var errorDescription: String? {
             switch self {
             case .noClientID: "No Spotify Client ID configured. Add one in Settings or Secrets.xcconfig."
             case .stateLost: "Login state lost — try again."
             case .denied(let r): "Spotify login denied: \(r)"
             case .exchange(let m): "Spotify login failed: \(m)"
+            case .notInvited: "This Spotify account isn’t enabled for ShelfPlay. Spotify limits speaker control to a few invited accounts until an app reaches 250,000 monthly users. Opening albums in Spotify still works."
             }
         }
     }
@@ -87,10 +88,30 @@ final class SpotifyAuth {
         guard let code = items.first(where: { $0.name == "code" })?.value,
               let verifier = pendingVerifier, let clientID = await clientID() else { throw AuthError.stateLost }
         pendingVerifier = nil
-        tokens = try await tokenRequest([
+        let newTokens = try await tokenRequest([
             "client_id": clientID, "grant_type": "authorization_code", "code": code,
             "redirect_uri": AppConfig.spotifyRedirectURI, "code_verifier": verifier,
         ], previousRefresh: nil)
+        // In development mode Spotify answers 403 for accounts not on the app's user list.
+        var me = URLRequest(url: URL(string: "https://api.spotify.com/v1/me")!)
+        me.setValue("Bearer \(newTokens.access)", forHTTPHeaderField: "Authorization")
+        if let (_, resp) = try? await URLSession.shared.data(for: me), (resp as? HTTPURLResponse)?.statusCode == 403 {
+            throw AuthError.notInvited
+        }
+        tokens = newTokens
+    }
+
+    /// Checks an operator access code with the worker (same check the web app uses).
+    static func verifyAccessCode(_ code: String) async -> Bool {
+        guard let base = AppConfig.apiBase, !code.isEmpty else { return false }
+        var req = URLRequest(url: base.appending(path: "api/vision"), timeoutInterval: 10)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue(code, forHTTPHeaderField: "X-Admin-Code")
+        req.httpBody = Data(#"{"image_base64":""}"#.utf8)
+        guard let (_, resp) = try? await URLSession.shared.data(for: req),
+              let status = (resp as? HTTPURLResponse)?.statusCode else { return false }
+        return status != 403 && status != 404
     }
 
     /// A valid access token, refreshing if it expires within two minutes. Nil when not connected.

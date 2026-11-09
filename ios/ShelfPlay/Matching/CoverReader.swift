@@ -7,6 +7,7 @@ struct AlbumGuess: Hashable, Sendable {
     var title: String
 }
 
+@available(iOS 26.0, *)
 @Generable(description: "An interpretation of which text on an album cover is the artist and which is the album title")
 struct GeneratedAlbumGuess {
     @Guide(description: "The performing artist or band name, with OCR spelling mistakes corrected")
@@ -15,6 +16,7 @@ struct GeneratedAlbumGuess {
     var title: String
 }
 
+@available(iOS 26.0, *)
 @Generable(description: "Interpretations of the text on an album cover")
 struct GeneratedCoverReading {
     @Guide(description: "One to three interpretations, most likely first", .count(1...3))
@@ -24,15 +26,15 @@ struct GeneratedCoverReading {
 /// Uses the on-device Apple Intelligence foundation model to turn noisy OCR from a sleeve
 /// into artist/title hypotheses. Falls back to a size-based heuristic when the model is unavailable.
 enum CoverReader {
-    static var availability: SystemLanguageModel.Availability { SystemLanguageModel.default.availability }
-
     static var isAvailable: Bool {
-        if case .available = availability { return true }
+        guard #available(iOS 26.0, *) else { return false }
+        if case .available = SystemLanguageModel.default.availability { return true }
         return false
     }
 
     static var statusText: String {
-        switch availability {
+        guard #available(iOS 26.0, *) else { return "Needs iOS 26 — using basic text matching" }
+        switch SystemLanguageModel.default.availability {
         case .available: return "On — cover text is interpreted on-device"
         case .unavailable(let reason):
             switch reason {
@@ -50,18 +52,22 @@ enum CoverReader {
     "Stereo", "Remastered", "Parental Advisory" and other noise — ignore those.
     Decide which text is the performing artist and which is the album title. Larger text is usually the \
     artist or the title. If only one name stands out, the album may be self-titled.
+    Soundtracks and cast recordings: the album title is the film or show name (for example "Grease"), \
+    and the actors' names are performers, so use the most prominent performer as the artist.
     Use your knowledge of real albums to correct misspellings and to choose between interpretations, \
     but never invent an artist or title that the text does not support.
     """
 
     static func guesses(from lines: [OCRLine]) async -> (guesses: [AlbumGuess], usedModel: Bool) {
         guard !lines.isEmpty else { return ([], false) }
-        if isAvailable, let modelGuesses = try? await modelGuesses(from: lines), !modelGuesses.isEmpty {
+        if #available(iOS 26.0, *), isAvailable,
+           let modelGuesses = try? await modelGuesses(from: lines), !modelGuesses.isEmpty {
             return (dedupe(modelGuesses + heuristicGuesses(from: lines)), true)
         }
         return (heuristicGuesses(from: lines), false)
     }
 
+    @available(iOS 26.0, *)
     private static func modelGuesses(from lines: [OCRLine]) async throws -> [AlbumGuess] {
         let listing = lines.prefix(25).map { line -> String in
             let size = line.relativeHeight > 0.08 ? "large" : line.relativeHeight > 0.035 ? "medium" : "small"

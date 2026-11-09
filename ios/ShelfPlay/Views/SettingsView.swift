@@ -8,6 +8,9 @@ struct SettingsView: View {
     @State private var joinCode = ""
     @State private var familyMessage: String?
     @State private var connecting = false
+    @State private var versionTaps = 0
+    @State private var askingCode = false
+    @State private var accessCode = ""
 
     var body: some View {
         @Bindable var settings = model.settings
@@ -29,7 +32,9 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    if model.spotifyAuth.isConnected {
+                    if !spotifyAvailable {
+                        Text("Albums open in the Spotify app.")
+                    } else if model.spotifyAuth.isConnected {
                         LabeledContent("Status", value: "Connected")
                         Picker("Speaker", selection: Binding(
                             get: { model.settings.spotifyDeviceID },
@@ -60,7 +65,11 @@ struct SettingsView: View {
                             .font(.footnote.monospaced())
                     }
                 } header: { Text("Spotify") } footer: {
-                    Text("Connect to play on Spotify speakers (Premium) and build playlists from your disc’s exact tracklist. Your Spotify app needs the redirect URI \(AppConfig.spotifyRedirectURI).")
+                    if spotifyAvailable {
+                        Text("Connect to play on Spotify speakers (Premium) and build playlists from your disc’s exact tracklist. Your Spotify app needs the redirect URI \(AppConfig.spotifyRedirectURI).")
+                    } else {
+                        Text("Playing on Spotify speakers and building playlists needs a Spotify connection. Spotify only allows a few invited accounts until an app reaches 250,000 monthly users, so for now it’s invite-only. Apple Music works fully.")
+                    }
                 }
                 .task { if model.spotifyAuth.isConnected { await model.refreshSpotifyDevices() } }
 
@@ -104,6 +113,15 @@ struct SettingsView: View {
 
                 Section {
                     LabeledContent("Version", value: AppConfig.appVersion)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            versionTaps += 1
+                            if versionTaps >= 5 {
+                                versionTaps = 0
+                                if model.settings.spotifyUnlocked { model.show("Spotify connection already enabled") }
+                                else { askingCode = true }
+                            }
+                        }
                     Link("Source on GitHub", destination: URL(string: "https://github.com/ncannings/Shelfplay")!)
                 } header: { Text("About") }
             }
@@ -111,8 +129,27 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .task { await model.appleMusic.refresh() }
+            .alert("Access code", isPresented: $askingCode) {
+                SecureField("Code", text: $accessCode)
+                Button("Unlock") {
+                    let code = accessCode
+                    accessCode = ""
+                    Task {
+                        if await SpotifyAuth.verifyAccessCode(code) {
+                            model.settings.spotifyUnlocked = true
+                            model.show("Spotify connection enabled")
+                        } else {
+                            model.show("That code wasn’t accepted")
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) { accessCode = "" }
+            }
         }
     }
+
+    /// Already-connected accounts stay usable; otherwise connecting needs the access code.
+    private var spotifyAvailable: Bool { model.settings.spotifyUnlocked || model.spotifyAuth.isConnected }
 
     private func connectSpotify() async {
         connecting = true

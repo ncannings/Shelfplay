@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /callback
+
+Sitemap: %%ORIGIN%%/sitemap.xml

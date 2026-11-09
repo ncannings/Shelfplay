@@ -50,6 +50,19 @@ enum CoverImageProcessor {
                 return (cg, true)
             }
         }
+        // Fall back to document segmentation, which copes better with sleeves on busy backgrounds.
+        if let doc = try? await DetectDocumentSegmentationRequest().perform(on: image), doc.confidence > 0.5,
+           doc.boundingBox.width * doc.boundingBox.height > 0.2 {
+            let filter = CIFilter.perspectiveCorrection()
+            filter.inputImage = CIImage(cgImage: image)
+            filter.topLeft = doc.topLeft.toImageCoordinates(size)
+            filter.topRight = doc.topRight.toImageCoordinates(size)
+            filter.bottomLeft = doc.bottomLeft.toImageCoordinates(size)
+            filter.bottomRight = doc.bottomRight.toImageCoordinates(size)
+            if let out = filter.outputImage, let cg = ciContext.createCGImage(out, from: out.extent) {
+                return (cg, true)
+            }
+        }
         let side = Int(Double(min(image.width, image.height)) * 0.9)
         let rect = CGRect(x: (image.width - side) / 2, y: (image.height - side) / 2, width: side, height: side)
         return (image.cropping(to: rect) ?? image, false)
@@ -74,14 +87,17 @@ enum CoverImageProcessor {
         do {
             return try await GenerateImageFeaturePrintRequest().perform(on: image)
         } catch {
-            Logger(subsystem: "stream.shelfplay", category: "Vision").error("Feature print failed: \(error.localizedDescription, privacy: .public)")
+            MatchTrace.write("Feature print failed: \(error.localizedDescription)")
             return nil
         }
     }
 
     static func downloadImage(_ url: URL) async -> CGImage? {
         guard let (data, _) = try? await URLSession.shared.data(from: url),
-              let image = UIImage(data: data) else { return nil }
+              let image = UIImage(data: data) else {
+            MatchTrace.write("Artwork download failed: \(url.absoluteString)")
+            return nil
+        }
         return image.cgImage
     }
 

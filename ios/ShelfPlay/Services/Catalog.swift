@@ -7,9 +7,18 @@ enum Catalog {
         var req = URLRequest(url: url, timeoutInterval: timeout)
         req.setValue(AppConfig.userAgent, forHTTPHeaderField: "User-Agent")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        guard let (data, resp) = try? await URLSession.shared.data(for: req),
-              (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-        return data
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            guard status == 200 else {
+                MatchTrace.write("HTTP \(status) from \(url.host() ?? "")\(url.path())")
+                return nil
+            }
+            return data
+        } catch {
+            MatchTrace.write("Request failed \(url.host() ?? ""): \(error.localizedDescription)")
+            return nil
+        }
     }
 
     private static func url(_ base: String, _ q: [String: String]) -> URL {
@@ -124,6 +133,25 @@ enum Catalog {
               let data = await get(url("https://itunes.apple.com/search", ["term": term, "entity": "album", "limit": "\(limit)", "country": AppConfig.storefront]), timeout: 6),
               let r = try? JSONDecoder().decode(ITunesResponse.self, from: data) else { return [] }
         return r.results.compactMap(albumResult)
+    }
+
+    /// Albums found through their songs. The iTunes album search misses many soundtracks and
+    /// compilations (e.g. the 1978 Grease soundtrack) that a song search surfaces immediately.
+    static func appleMusicAlbumsViaSongs(term: String, maxAlbums: Int = 6) async -> [AlbumResult] {
+        guard !term.trimmingCharacters(in: .whitespaces).isEmpty,
+              let data = await get(url("https://itunes.apple.com/search", ["term": term, "entity": "song", "limit": "20", "country": AppConfig.storefront]), timeout: 6),
+              let r = try? JSONDecoder().decode(ITunesResponse.self, from: data) else { return [] }
+        var ids: [Int] = []
+        for item in r.results { if let id = item.collectionId, !ids.contains(id) { ids.append(id) } }
+        return await appleMusicAlbums(ids: Array(ids.prefix(maxAlbums)))
+    }
+
+    static func appleMusicAlbums(ids: [Int]) async -> [AlbumResult] {
+        guard !ids.isEmpty,
+              let data = await get(url("https://itunes.apple.com/lookup", ["id": ids.map(String.init).joined(separator: ","), "country": AppConfig.storefront]), timeout: 6),
+              let r = try? JSONDecoder().decode(ITunesResponse.self, from: data) else { return [] }
+        let albums = r.results.filter { $0.wrapperType == "collection" }.compactMap(albumResult)
+        return ids.compactMap { id in albums.first { $0.appleMusicID == String(id) } }
     }
 
     static func appleMusicAlbum(artist: String, title: String) async -> AlbumResult? {
