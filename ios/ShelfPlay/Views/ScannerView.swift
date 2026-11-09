@@ -10,6 +10,8 @@ struct ScannerView: View {
     @State private var flash = false
     @State private var coverDetection: CoverDetection = .searching
     @State private var barcodeArmedUntil: Date?
+    /// Debug-only stand-in for the live camera (App Store screenshots in the simulator).
+    @State private var demoCamera: UIImage?
 
     private var auto: Bool { model.settings.autoCapture }
     private var barcodeArmed: Bool { (barcodeArmedUntil ?? .distantPast) > .now }
@@ -18,12 +20,14 @@ struct ScannerView: View {
         @Bindable var model = model
         ZStack {
             Theme.background.ignoresSafeArea()
-            if cameraRunning {
+            if let demoCamera {
+                Color.clear.overlay(Image(uiImage: demoCamera).resizable().scaledToFill()).clipped().ignoresSafeArea()
+            } else if cameraRunning {
                 CameraPreview(session: camera.session).ignoresSafeArea()
             } else if cameraChecked {
                 noCamera
             }
-            if cameraRunning { viewfinder }
+            if cameraRunning || demoCamera != nil { viewfinder }
             VStack(spacing: 0) {
                 topBar
                 Spacer()
@@ -68,6 +72,31 @@ struct ScannerView: View {
             }
             if let code = UserDefaults.standard.string(forKey: "ShelfPlayBarcodeTest") {
                 await model.handleBarcode(code)
+            }
+            // Screenshot helpers:
+            //   -ShelfPlaySeed "Artist Album|Artist Album"  adds albums to the shelf
+            //   -ShelfPlayDemoCamera /path/photo.jpg        shows a photo instead of the camera (Cover mode, holding)
+            //   -ShelfPlayOpen library|settings|search      opens a sheet
+            if let seed = UserDefaults.standard.string(forKey: "ShelfPlaySeed") {
+                for (i, term) in seed.split(separator: "|").enumerated() {
+                    if var album = await model.searchCandidates(String(term)).first {
+                        album.source = i % 3 == 0 ? .cover : .barcode
+                        album.scannedAt = Date.now.addingTimeInterval(-Double(i) * 3600)
+                        model.save(album)
+                    }
+                }
+            }
+            if let path = UserDefaults.standard.string(forKey: "ShelfPlayDemoCamera"), let image = UIImage(contentsOfFile: path) {
+                model.mode = .cover
+                demoCamera = image
+                coverDetection = .holding(0.62)
+                model.status = "Fill the square with the cover"
+            }
+            switch UserDefaults.standard.string(forKey: "ShelfPlayOpen") {
+            case "library": model.sheet = .library
+            case "settings": model.sheet = .settings
+            case "search": model.sheet = .search
+            default: break
             }
             #endif
         }
@@ -256,7 +285,7 @@ struct ScannerView: View {
         let active = cameraRunning && !model.scannerPaused
         camera.detectsBarcodes = model.mode == .barcode
         camera.detectsCovers = active && model.mode == .cover && auto
-        if !camera.detectsCovers { coverDetection = .searching }
+        if !camera.detectsCovers && demoCamera == nil { coverDetection = .searching }
     }
 
     private func capture() {
