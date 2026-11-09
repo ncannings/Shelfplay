@@ -37,3 +37,6 @@ ios/Support/Secrets.xcconfig
 ios/build/
 xcuserdata/
 *.xcuserstate
+
+# App Store screenshots (contain third-party album artwork)
+ios/AppStoreScreenshots/
