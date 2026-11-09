@@ -3,6 +3,9 @@
 ## Architecture
 Single-file PWA: `index.html` (HTML+CSS+JS) + `worker-routes.js` (API routes) → built into `shelfplay-worker.js` via `node build-worker.js`. Runs on Cloudflare Workers.
 
+## iOS app (`ios/`)
+Native SwiftUI app (iOS 26). Open `ios/ShelfPlay.xcodeproj`. The project uses synchronized folders, so new files under `ios/ShelfPlay/` are picked up automatically. Deployer values go in `ios/Support/Secrets.xcconfig` (gitignored; template in `Secrets.example.xcconfig`). Cover matching is fully on-device (`ios/ShelfPlay/Matching/`: Vision + Foundation Models). Playback: Apple Music (MusicKit) and Spotify (PKCE, no secret). See `ios/README.md`.
+
 ## Build & Deploy
 ```bash
 bash deploy.sh          # Injects config, builds, deploys, restores clean source

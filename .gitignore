@@ -31,3 +31,9 @@ deploy.sh
 
 # Legacy stub (not used)
 worker.js
+
+# iOS app local config
+ios/Support/Secrets.xcconfig
+ios/build/
+xcuserdata/
+*.xcuserstate

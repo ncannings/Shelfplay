@@ -1,0 +1,10 @@
+// ShelfPlay iOS build configuration.
+// Deployer-specific values live in Secrets.xcconfig (gitignored).
+// Copy Secrets.example.xcconfig to Secrets.xcconfig and fill it in.
+
+SHELFPLAY_BUNDLE_ID = stream.shelfplay.app
+SPOTIFY_CLIENT_ID =
+SHELFPLAY_API_HOST =
+DEVELOPMENT_TEAM =
+
+#include? "Secrets.xcconfig"
