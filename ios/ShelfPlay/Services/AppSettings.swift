@@ -21,6 +21,15 @@ final class AppSettings {
     var familyCode: String {
         didSet { defaults.set(familyCode, forKey: "familyCode") }
     }
+    /// Spotify's development mode only allows a handful of invited accounts, so connecting is hidden
+    /// until unlocked with the operator's access code (the worker's ADMIN_CODE).
+    var spotifyUnlocked: Bool {
+        didSet { defaults.set(spotifyUnlocked, forKey: "spotifyUnlocked") }
+    }
+    /// Scan automatically (barcodes as seen, covers once held steady) vs only on the shutter.
+    var autoCapture: Bool {
+        didSet { defaults.set(autoCapture, forKey: "autoCapture") }
+    }
     var spotifyClientIDOverride: String {
         didSet { defaults.set(spotifyClientIDOverride, forKey: "spotifyClientIDOverride") }
     }
@@ -32,5 +41,7 @@ final class AppSettings {
         saveToSpotifyLibrary = defaults.bool(forKey: "saveToSpotifyLibrary")
         familyCode = defaults.string(forKey: "familyCode") ?? ""
         spotifyClientIDOverride = defaults.string(forKey: "spotifyClientIDOverride") ?? ""
+        autoCapture = defaults.object(forKey: "autoCapture") as? Bool ?? true
+        spotifyUnlocked = defaults.bool(forKey: "spotifyUnlocked")
     }
 }

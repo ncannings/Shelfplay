@@ -51,6 +51,25 @@ final class AppleMusicService {
         return out
     }
 
+    /// Apple Music API catalog search — far better ranking than the public iTunes search.
+    /// Requires MusicKit to be enabled for the App ID; returns [] otherwise.
+    func searchAlbums(term: String, limit: Int = 8) async -> [AlbumResult] {
+        guard isAuthorized else { return [] }
+        var req = MusicCatalogSearchRequest(term: term, types: [Album.self])
+        req.limit = limit
+        guard let albums = try? await req.response().albums else { return [] }
+        return albums.map { a in
+            var r = AlbumResult(name: a.title, artist: a.artistName,
+                                year: a.releaseDate.map { String(Calendar.current.component(.year, from: $0)) } ?? "")
+            r.appleMusicID = a.id.rawValue
+            r.appleMusicURL = a.url?.absoluteString
+            r.image = a.artwork?.url(width: 300, height: 300)
+            r.imageLarge = a.artwork?.url(width: 600, height: 600)
+            r.totalTracks = a.trackCount
+            return r
+        }
+    }
+
     func play(_ album: AlbumResult) async throws {
         if !isAuthorized { await requestAccess() }
         guard isAuthorized, canPlayCatalog else {

@@ -50,6 +50,8 @@ enum CoverReader {
     "Stereo", "Remastered", "Parental Advisory" and other noise — ignore those.
     Decide which text is the performing artist and which is the album title. Larger text is usually the \
     artist or the title. If only one name stands out, the album may be self-titled.
+    Soundtracks and cast recordings: the album title is the film or show name (for example "Grease"), \
+    and the actors' names are performers, so use the most prominent performer as the artist.
     Use your knowledge of real albums to correct misspellings and to choose between interpretations, \
     but never invent an artist or title that the text does not support.
     """

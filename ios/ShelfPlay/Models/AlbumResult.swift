@@ -53,6 +53,9 @@ struct AlbumResult: Codable, Hashable, Identifiable {
     var scannedAt: Date = .now
     /// Archived Vision feature print of the photographed cover, for instant re-recognition.
     var coverPrint: Data?
+    /// True once the match behind `coverPrint` is confirmed (strong artwork match, the user picked it,
+    /// or played it). Only confirmed prints are used for instant shelf recognition.
+    var coverPrintConfirmed = false
 
     var id: String { libraryKey }
 
@@ -99,12 +102,15 @@ struct AlbumResult: Codable, Hashable, Identifiable {
         mbTrackCount = mbTrackCount ?? other.mbTrackCount
         matchedTracks = matchedTracks ?? other.matchedTracks
         trackURIs = trackURIs ?? other.trackURIs
-        coverPrint = coverPrint ?? other.coverPrint
+        if coverPrint == nil {
+            coverPrint = other.coverPrint
+            coverPrintConfirmed = other.coverPrintConfirmed
+        }
     }
 
     enum CodingKeys: String, CodingKey {
         case name, artist, year, image, imageLarge, totalTracks, barcode, mbid, mbTitle,
-             mbTrackCount, matchedTracks, source, scannedAt, coverPrint
+             mbTrackCount, matchedTracks, source, scannedAt, coverPrint, coverPrintConfirmed
         case spotifyURI = "uri"
         case appleMusicID = "appleMusicId"
         case appleMusicURL = "appleMusicUrl"
@@ -149,6 +155,7 @@ struct AlbumResult: Codable, Hashable, Identifiable {
             scannedAt = .now
         }
         coverPrint = try? c.decodeIfPresent(Data.self, forKey: .coverPrint)
+        coverPrintConfirmed = ((try? c.decodeIfPresent(Bool.self, forKey: .coverPrintConfirmed)) ?? nil) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -174,6 +181,7 @@ struct AlbumResult: Codable, Hashable, Identifiable {
         try c.encode(source, forKey: .source)
         try c.encode(ISO8601DateFormatter.withFractional.string(from: scannedAt), forKey: .scannedAt)
         try c.encodeIfPresent(coverPrint, forKey: .coverPrint)
+        if coverPrint != nil { try c.encode(coverPrintConfirmed, forKey: .coverPrintConfirmed) }
     }
 }
 
@@ -212,7 +220,7 @@ enum TextNormalizer {
 
     static func tokens(_ s: String) -> [String] {
         let stop: Set<String> = ["the", "a", "an", "of", "and"]
-        return normalize(s).split(separator: " ").map(String.init).filter { $0.count >= 2 && !stop.contains($0) }
+        return normalize(s).split(separator: " ").map(String.init).filter { ($0.count >= 2 || $0.allSatisfy(\.isNumber)) && !stop.contains($0) }
     }
 
     static func albumKey(artist: String, title: String) -> String {
@@ -225,6 +233,38 @@ enum TextNormalizer {
         guard !ta.isEmpty, !tb.isEmpty else { return 0 }
         return Double(ta.intersection(tb).count) / Double(max(ta.count, tb.count))
     }
+
+    /// Title without edition notes: "Grease (The Original Soundtrack…)" → "Grease".
+    static func coreTitle(_ s: String) -> String {
+        var t = s.replacingOccurrences(of: #"\s*[\(\[][^\)\]]*[\)\]]"#, with: "", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"(?i)\s+-\s+.*(remaster|edition|version|soundtrack|from|single|ep\b|deluxe|live).*$"#, with: "", options: .regularExpression)
+        let trimmed = t.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? s : trimmed
+    }
+
+    /// Lowercased word tokens keeping bracketed text (unlike `tokens`), for comparing full titles.
+    static func rawTokens(_ s: String) -> Set<String> {
+        let folded = s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .replacingOccurrences(of: #"[^a-z0-9 ]"#, with: " ", options: .regularExpression)
+        let stop: Set<String> = ["the", "a", "an", "of", "and", "from"]
+        return Set(folded.split(separator: " ").map(String.init).filter { ($0.count >= 2 || $0.allSatisfy(\.isNumber)) && !stop.contains($0) })
+    }
+
+    /// Credited names split into individual artists: "A & B, C feat. D" → [A, B, C, D].
+    static func artistSegments(_ s: String) -> [String] {
+        s.replacingOccurrences(of: #"(?i)\s*(,|&|\band\b|\bfeat\.?|\bwith\b|\bx\b)\s*"#, with: "|", options: .regularExpression)
+            .split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    static func isVariousArtists(_ s: String) -> Bool { normalize(s).contains("various artists") }
+
+    /// Words that mark a *different* release of the same name: compilations, live albums, cast
+    /// recordings, tributes.
+    static let variantWords: Set<String> = [
+        "greatest", "hits", "best", "collection", "essential", "essentials", "anthology", "gold", "ultimate",
+        "live", "broadway", "cast", "studio", "karaoke", "tribute", "instrumental", "lullaby", "lullabies", "piano",
+        "quartet", "remix", "remixes", "covers", "performs", "reimagined", "acoustic", "sings", "musical",
+    ]
 
     static func levenshtein(_ a: String, _ b: String) -> Int {
         let a = Array(a), b = Array(b)

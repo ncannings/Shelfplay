@@ -99,6 +99,49 @@ final class SpotifyAPI {
         return nil
     }
 
+    /// The Spotify release of an album identified elsewhere (Apple Music, MusicBrainz). Searches by
+    /// title with each credited artist, then scores results on title, edition words, year and track count,
+    /// so "Grease (The Original Soundtrack…)" by "Jim Jacobs & Warren Casey, John Travolta & …" resolves to
+    /// Spotify's "Grease (The Original Motion Picture Soundtrack)" by Various Artists rather than a cast album.
+    func findAlbum(matching target: AlbumResult) async -> AlbumResult? {
+        let core = TextNormalizer.coreTitle(target.name)
+        var queries = TextNormalizer.artistSegments(target.artist).prefix(3).map { "album:\(core) artist:\($0)" }
+        queries.append(target.name.replacingOccurrences(of: #"[\(\)\[\]]"#, with: " ", options: .regularExpression))
+        queries.append("album:\(core)")
+        var seen = Set<String>()
+        var best: (album: AlbumResult, score: Double)?
+        for q in queries {
+            for c in await searchAlbums(query: q, limit: 10) where seen.insert(c.spotifyURI ?? c.name).inserted {
+                let score = Self.matchScore(c, target)
+                if score > (best?.score ?? 0) { best = (c, score) }
+            }
+            if let best, best.score >= 0.85 { break }
+        }
+        guard let best, best.score >= 0.55 else { return nil }
+        return best.album
+    }
+
+    static func matchScore(_ c: AlbumResult, _ t: AlbumResult) -> Double {
+        let coreMatch = TextNormalizer.normalize(TextNormalizer.coreTitle(c.name)) == TextNormalizer.normalize(TextNormalizer.coreTitle(t.name))
+            ? 1.0 : TextNormalizer.similarity(TextNormalizer.coreTitle(c.name), TextNormalizer.coreTitle(t.name))
+        let cr = TextNormalizer.rawTokens(c.name), tr = TextNormalizer.rawTokens(t.name)
+        let fullSim = cr.isEmpty || tr.isEmpty ? 0 : Double(cr.intersection(tr).count) / Double(max(cr.count, tr.count))
+        let artist: Double
+        if TextNormalizer.isVariousArtists(c.artist) || TextNormalizer.isVariousArtists(t.artist) {
+            artist = 0.5
+        } else {
+            let cSeg = TextNormalizer.artistSegments(c.artist), tSeg = TextNormalizer.artistSegments(t.artist)
+            artist = cSeg.contains { a in tSeg.contains { TextNormalizer.normalize($0) == TextNormalizer.normalize(a) } } ? 1
+                : TextNormalizer.similarity(c.artist, t.artist)
+        }
+        let year = (!c.year.isEmpty && c.year == t.year) ? 1.0 : 0
+        let tracks = (c.totalTracks != nil && t.totalTracks != nil && abs(c.totalTracks! - t.totalTracks!) <= 2) ? 1.0 : 0
+        var score = 0.5 * coreMatch + 0.2 * fullSim + 0.15 * artist + 0.1 * year + 0.05 * tracks
+        let extraVariant = cr.intersection(TextNormalizer.variantWords).subtracting(tr)
+        if !extraVariant.isEmpty { score -= 0.4 }
+        return score
+    }
+
     func albumByUPC(_ upc: String) async -> AlbumResult? {
         await searchAlbums(query: "upc:\(upc)", limit: 1).first
     }

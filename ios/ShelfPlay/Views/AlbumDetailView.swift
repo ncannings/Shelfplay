@@ -263,7 +263,7 @@ struct AlbumDetailView: View {
     private func openIn(_ service: MusicService) {
         switch service {
         case .appleMusic: model.appleMusic.openInMusicApp(album)
-        case .spotify: model.openInSpotify(album)
+        case .spotify: Task { await model.openInSpotify(album) }
         }
     }
 }
